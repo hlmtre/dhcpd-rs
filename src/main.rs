@@ -4,7 +4,7 @@ use std::net::UdpSocket;
 use std::{io, net::Ipv4Addr, net::SocketAddr};
 
 fn main() -> std::io::Result<()> {
-  let mut socket = UdpSocket::bind("255.255.255.255:67")?;
+  let mut socket = UdpSocket::bind("0.0.0.0:67")?;
   socket.set_nonblocking(true).unwrap();
   //let _ = socket.set_broadcast(true);
   let mut buf = [0; 128];
