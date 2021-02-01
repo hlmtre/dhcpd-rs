@@ -1,5 +1,6 @@
 extern crate packet;
 
+use packet::{ip, udp, Packet};
 use std::net::UdpSocket;
 use std::{io, net::Ipv4Addr, net::SocketAddr};
 
@@ -21,8 +22,14 @@ fn main() -> std::io::Result<()> {
         Err(e) => panic!("IO ERROR {}", e),
       }
     };
-    let filled_buf = &mut buf[..num_bytes_read];
-    eprintln!("{:#?}, {:#?}", filled_buf, src_addr);
+    let filled_buf: &mut [u8] = &mut buf[..num_bytes_read];
+    let _ip = ip::v4::Packet::new(filled_buf);
+    eprintln!("{:#?}", _ip);
+    if _ip.is_ok() {
+      let __ip = _ip.unwrap();
+      let p: udp::Packet<_> = udp::Packet::new(__ip.payload()).unwrap();
+      eprintln!("{:#?}, from {:#?}", p, src_addr);
+    }
     std::thread::sleep(std::time::Duration::from_millis(1000));
   }
   Ok(())
