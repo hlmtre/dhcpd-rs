@@ -30,7 +30,7 @@ pub(crate) struct DhcpMessage {
   yiaddr: u32,
   siaddr: u32,
   giaddr: u32,
-  chwaddr: u64,
+  pub chwaddr: Vec<u8>,
   sname: u128,
   file: u128,
   options: Vec<u8>,
@@ -47,6 +47,7 @@ impl DhcpMessage {
     self.flags = u16::from_be_bytes(buf[11..13].try_into().unwrap());
     self.ciaddr = u32::from_be_bytes(buf[13..17].try_into().unwrap());
     self.yiaddr = u32::from_be_bytes(buf[17..21].try_into().unwrap());
-    self.chwaddr = u64::from_be_bytes(buf[28..36].try_into().unwrap());
+    self.chwaddr = buf[28..34].to_vec();
+    //self.chwaddr = u64::from_be_bytes(buf[28..36].try_into().unwrap());
   }
 }
