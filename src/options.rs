@@ -17,7 +17,7 @@ use std::convert::TryInto;
 ///  file (128): boot filename.
 ///  options (variable): dhcp options, variable length.
 ///
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub(crate) struct DhcpMessage {
   op: u8,
   htype: u8,
@@ -30,7 +30,7 @@ pub(crate) struct DhcpMessage {
   yiaddr: u32,
   siaddr: u32,
   giaddr: u32,
-  pub chwaddr: Vec<u8>,
+  pub chaddr: Vec<u8>,
   sname: u128,
   file: u128,
   options: Vec<u8>,
@@ -47,7 +47,10 @@ impl DhcpMessage {
     self.flags = u16::from_be_bytes(buf[11..13].try_into().unwrap());
     self.ciaddr = u32::from_be_bytes(buf[13..17].try_into().unwrap());
     self.yiaddr = u32::from_be_bytes(buf[17..21].try_into().unwrap());
-    self.chwaddr = buf[28..34].to_vec();
-    //self.chwaddr = u64::from_be_bytes(buf[28..36].try_into().unwrap());
+    if self.hlen == 6 {
+      self.chaddr = buf[28..34].to_vec();
+    } else {
+      self.chaddr = buf[28..36].to_vec();
+    }
   }
 }
