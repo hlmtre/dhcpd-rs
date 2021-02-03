@@ -1,4 +1,5 @@
 use std::convert::TryInto;
+use std::fmt;
 ///
 ///  dhcp message format by byte:
 ///  op (1 byte): 1 indicates a request, 2 a reply
@@ -35,8 +36,33 @@ pub(crate) struct DhcpMessage {
   file: u128,
   options: Vec<u8>,
 }
+impl fmt::Display for DhcpMessage {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    let s: &str = if self.op == 1 { "request" } else { "reply" };
+    write!(
+      f,
+      "message type: {}
+       mac length:   {}
+       mac address:  {}",
+      s,
+      self.hlen,
+      self.format_mac()
+    )
+  }
+}
 
 impl DhcpMessage {
+  pub(crate) fn format_mac(&self) -> String {
+    format!(
+      "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+      self.chaddr[0],
+      self.chaddr[1],
+      self.chaddr[2],
+      self.chaddr[3],
+      self.chaddr[4],
+      self.chaddr[5]
+    )
+  }
   pub(crate) fn parse(&mut self, buf: &[u8]) {
     self.op = buf[0];
     self.htype = buf[1];

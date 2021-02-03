@@ -1,7 +1,6 @@
 mod options;
-mod util;
 
-use crate::{options::DhcpMessage, util::format_mac};
+use crate::options::DhcpMessage;
 use std::net::UdpSocket;
 
 fn main() -> std::io::Result<()> {
@@ -22,9 +21,9 @@ fn main() -> std::io::Result<()> {
         println!(
           "received bytes {:02X?} from {:02x?}",
           filled_buf,
-          format_mac(d.chaddr.clone())
+          d.format_mac()
         );
-        eprintln!("DhcpMessage: {:02X?}", d);
+        println!("DhcpMessage: {}", d);
         println!("would respond on {}", _n);
       }
       Err(_) => {}
