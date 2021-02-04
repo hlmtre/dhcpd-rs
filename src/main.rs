@@ -28,7 +28,7 @@ fn main() -> std::io::Result<()> {
         let filled_buf: &mut [u8] = &mut buf[..l];
         d.parse(filled_buf);
         println!(
-          "received bytes {:02X?} from {:02x?}",
+          "received bytes {:02x?} from {:02x?}",
           filled_buf,
           d.format_mac()
         );
