@@ -68,7 +68,7 @@ pub(crate) struct DhcpMessage {
   yiaddr: u32,
   siaddr: u32,
   giaddr: u32,
-  pub chaddr: Vec<u8>,
+  chaddr: Vec<u8>,
   sname: usize,
   file: usize,
   options: HashMap<String, DhcpOption>,
