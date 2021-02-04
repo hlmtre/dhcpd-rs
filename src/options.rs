@@ -1,5 +1,5 @@
-use std::convert::TryInto;
 use std::fmt;
+use std::{collections::HashMap, convert::TryInto, net::Ipv4Addr};
 
 // for reference: the magic cookie marks the start of DHCP options.
 // otherwise you'd never know where the options start after the fixed length of the base bootp message
@@ -71,7 +71,58 @@ pub(crate) struct DhcpMessage {
   pub chaddr: Vec<u8>,
   sname: usize,
   file: usize,
-  options: Vec<u128>,
+  options: HashMap<String, DhcpOption>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RawDhcpOption {
+  code: u8,
+  data: Vec<u8>, // just a string of bytes we don't have to understand
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum DhcpOption {
+  MessageType(DhcpMessageType),
+  ServerIdentifier(Ipv4Addr),
+  ParameterRequestList(Vec<u8>),
+  RequestedIpAddress(Ipv4Addr),
+  Hostname(String),
+  Router(Vec<Ipv4Addr>),
+  DomainNameServer(Vec<Ipv4Addr>),
+  IpAddressLeaseTime(u32),
+  SubnetMask(Ipv4Addr),
+  Message(String),
+  Unrecognized(RawDhcpOption),
+}
+
+#[derive(Debug, Clone)]
+#[repr(u8)]
+pub(crate) enum DhcpMessageType {
+  UNKNOWN = 0,
+  DHCPDISCOVER = 1,
+  DHCPOFFER = 2,
+  DHCPREQUEST = 3,
+  DHCPDECLINE = 4,
+  DHCPACK = 5,
+  DHCPNAK = 6,
+  DHCPRELEASE = 7,
+  DHCPINFORM = 8,
+}
+
+impl DhcpMessageType {
+  fn from_u8(value: u8) -> DhcpMessageType {
+    match value {
+      1 => DhcpMessageType::DHCPDISCOVER,
+      2 => DhcpMessageType::DHCPOFFER,
+      3 => DhcpMessageType::DHCPREQUEST,
+      4 => DhcpMessageType::DHCPDECLINE,
+      5 => DhcpMessageType::DHCPACK,
+      6 => DhcpMessageType::DHCPNAK,
+      7 => DhcpMessageType::DHCPRELEASE,
+      8 => DhcpMessageType::DHCPINFORM,
+      _ => DhcpMessageType::UNKNOWN,
+    }
+  }
 }
 
 impl fmt::Display for DhcpMessage {
@@ -104,6 +155,7 @@ impl DhcpMessage {
   }
 
   pub(crate) fn parse(&mut self, buf: &[u8]) {
+    // first do the known-size parts
     self.op = buf[0];
     self.htype = buf[1];
     self.hlen = buf[2];
@@ -118,7 +170,35 @@ impl DhcpMessage {
     } else {
       self.chaddr = buf[28..36].to_vec();
     }
+    // then the parts that are actually DHCP, not just bootp
+    // these parts are variable length, so we have to
+    // get past the four-byte magic cookie to the next option
+    let mut current_index = Self::get_options_index(&self, buf) + 4;
+    // this gets the next u8 byte off the array, AND increments our index by 1
+    let next = Self::take_next(&self, buf, &mut current_index, 1);
+    match next {
+      0x01 => {
+        let dhcp_message_type = Self::take_next(&self, buf, &mut current_index, 1);
+        self.options.insert(
+          "MESSAGETYPE".to_string(),
+          DhcpOption::MessageType(DhcpMessageType::from_u8(dhcp_message_type)),
+        );
+      }
+      _ => {}
+    }
   }
+
+  // look but don't mess with current index
+  fn peek_next(&self, buf: &[u8], current_index: usize) -> u8 {
+    buf[current_index]
+  }
+
+  // take the next value off, then jump ahead the specified amount
+  fn take_next(&self, buf: &[u8], current_index: &mut usize, jump: usize) -> u8 {
+    *current_index += jump;
+    buf[*current_index]
+  }
+
   pub(crate) fn get_options_index(&self, ba: &[u8]) -> usize {
     let mmc = MAGIC_COOKIE;
     // examine each four bytes - are they our magic cookie?
@@ -128,14 +208,12 @@ impl DhcpMessage {
     let ba_len = ba.len();
     for _b in 0..=ba_len {
       if ba[start..end] == mmc {
-        println!("found magic cookie! see? {:02x?}", &ba[start - 1..end + 1]);
         return start;
       }
       start += 1;
       end += 1;
       // if we run out of bits, it can't be here
       if end >= ba_len {
-        println!("didn't find magic cookie :(");
         return 0;
       }
     }
