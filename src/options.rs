@@ -1,7 +1,42 @@
 use std::convert::TryInto;
 use std::fmt;
+
+const MAGIC_COOKIE: [u8; 4] = [0x62, 0x82, 0x53, 0x63];
+
+/*
+   0                   1                   2                   3
+   0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |     op (1)    |   htype (1)   |   hlen (1)    |   hops (1)    |
+   +---------------+---------------+---------------+---------------+
+   |                            xid (4)                            |
+   +-------------------------------+-------------------------------+
+   |           secs (2)            |           flags (2)           |
+   +-------------------------------+-------------------------------+
+   |                          ciaddr  (4)                          |
+   +---------------------------------------------------------------+
+   |                          yiaddr  (4)                          |
+   +---------------------------------------------------------------+
+   |                          siaddr  (4)                          |
+   +---------------------------------------------------------------+
+   |                          giaddr  (4)                          |
+   +---------------------------------------------------------------+
+   |                                                               |
+   |                          chaddr  (16)                         |
+   |                                                               |
+   |                                                               |
+   +---------------------------------------------------------------+
+   |                                                               |
+   |                          sname   (64)                         |
+   +---------------------------------------------------------------+
+   |                                                               |
+   |                          file    (128)                        |
+   +---------------------------------------------------------------+
+   |                                                               |
+   |                          options (variable)                   |
+   +---------------------------------------------------------------+
+*/
 ///
-///  dhcp message format by byte:
 ///  op (1 byte): 1 indicates a request, 2 a reply
 ///  htype (1 byte): ethernet is 1, 6 is IEEE 802 networks, 7 ARCNET. generally 6.
 ///  hlen (1): hardware address length. MAC address length; generally 6.
@@ -32,16 +67,18 @@ pub(crate) struct DhcpMessage {
   siaddr: u32,
   giaddr: u32,
   pub chaddr: Vec<u8>,
-  sname: u128,
-  file: u128,
-  options: Vec<u8>,
+  sname: usize,
+  file: usize,
+  options: Vec<u128>,
 }
+
 impl fmt::Display for DhcpMessage {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     let s: &str = if self.op == 1 { "request" } else { "reply" };
     write!(
       f,
-      "message type: {}
+      "
+       message type: {}
        mac length:   {}
        mac address:  {}",
       s,
@@ -63,6 +100,7 @@ impl DhcpMessage {
       self.chaddr[5]
     )
   }
+
   pub(crate) fn parse(&mut self, buf: &[u8]) {
     self.op = buf[0];
     self.htype = buf[1];
@@ -77,6 +115,17 @@ impl DhcpMessage {
       self.chaddr = buf[28..34].to_vec();
     } else {
       self.chaddr = buf[28..36].to_vec();
+    }
+  }
+  pub(crate) fn get_options_index(&self, ba: &[u8]) {
+    let mmc = MAGIC_COOKIE;
+    match ba {
+      mmc => {
+        println!(
+          "magic cookie found! see: {}",
+          mmc.iter().map(|x| format!("{:02x}", x)).collect::<String>()
+        );
+      }
     }
   }
 }
