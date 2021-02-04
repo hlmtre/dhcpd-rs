@@ -1,7 +1,9 @@
 use std::convert::TryInto;
 use std::fmt;
 
-const MAGIC_COOKIE: [u8; 4] = [0x62, 0x82, 0x53, 0x63];
+// for reference: the magic cookie marks the start of DHCP options.
+// otherwise you'd never know where the options start after the fixed length of the base bootp message
+const MAGIC_COOKIE: [u8; 4] = [0x63, 0x82, 0x53, 0x63];
 
 /*
    0                   1                   2                   3
@@ -117,15 +119,27 @@ impl DhcpMessage {
       self.chaddr = buf[28..36].to_vec();
     }
   }
-  pub(crate) fn get_options_index(&self, ba: &[u8]) {
+  pub(crate) fn get_options_index(&self, ba: &[u8]) -> usize {
     let mmc = MAGIC_COOKIE;
-    match ba {
-      mmc => {
-        println!(
-          "magic cookie found! see: {}",
-          mmc.iter().map(|x| format!("{:02x}", x)).collect::<String>()
-        );
+    // examine each four bytes - are they our magic cookie?
+    // they have to start at the end of the base bootp data
+    let mut start: usize = 200;
+    let mut end: usize = 204;
+    let ba_len = ba.len();
+    for _b in 0..=ba_len {
+      if ba[start..end] == mmc {
+        println!("found magic cookie! see? {:02x?}", &ba[start - 1..end + 1]);
+        return start;
+      }
+      start += 1;
+      end += 1;
+      // if we run out of bits, it can't be here
+      if end >= ba_len {
+        println!("didn't find magic cookie :(");
+        return 0;
       }
     }
+    // if we didn't find it already
+    0
   }
 }

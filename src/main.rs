@@ -33,8 +33,9 @@ fn main() -> std::io::Result<()> {
           d.format_mac()
         );
         println!("DhcpMessage: {}", d);
+        let magic_cookie_index = d.get_options_index(filled_buf);
+        println!("magic cookie index: {}", magic_cookie_index);
         println!("would respond on {}", _n);
-        d.get_options_index(filled_buf);
       }
       Err(_) => {}
     }
