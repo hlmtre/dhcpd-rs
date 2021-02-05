@@ -181,8 +181,15 @@ impl DhcpMessage {
     let mut current_index = Self::get_options_index(&self, buf) + 5;
     loop {
       // this gets the next u8 byte off the array, AND increments our index by 1
-      let next = Self::take_next(&self, buf, &mut current_index, 1);
+      /*
+      from the end of the dhcp option, grab the dhcp option type
+      then pass it in below to grab the entire value, and increment our counter to the end of the
+      option
+      */
+      let next: Result<Vec<u8>, DhcpMessageParseError> =
+        Self::take_next(&self, buf, &mut current_index, 1);
       match next {
+        // check the first byte of the returned byte array - this tells us the dhcp option
         Ok(n) => match n[0] {
           0x01 => {
             let dhcp_message_type = Self::take_next(&self, buf, &mut current_index, 1);
@@ -190,7 +197,24 @@ impl DhcpMessage {
               "MESSAGETYPE".to_string(),
               DhcpOption::MessageType(DhcpMessageType::from_u8(dhcp_message_type.unwrap()[0])),
             );
-            break;
+          }
+          0x32 => {
+            let request_len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
+            println!("next chunk is {} bytes long", request_len);
+            let four_bee =
+              Self::take_next(&self, buf, &mut current_index, request_len.into()).unwrap();
+            let ip: Ipv4Addr = Ipv4Addr::new(four_bee[0], four_bee[1], four_bee[2], four_bee[3]);
+            println!("client requested ip: {}", ip);
+          }
+          0x0c => {
+            let hostname_len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
+            println!("hostname len: {}", hostname_len);
+            let hostname =
+              Self::take_next(&self, buf, &mut current_index, hostname_len.into()).unwrap();
+            println!(
+              "client says it's {}",
+              std::str::from_utf8(&hostname).unwrap()
+            );
           }
           _ => {
             break;
