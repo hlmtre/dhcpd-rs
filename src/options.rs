@@ -179,8 +179,6 @@ impl DhcpMessage {
     // these parts are variable length, so we have to
     // get past the four-byte magic cookie to the next option
     let mut current_index = Self::get_options_index(&self, buf) + 4;
-    // the dhcp message type is option code 0x01 - which is ALSO the subnet mask option.
-    // so we grap the message type first, then iterate over the rest of the options
     loop {
       // this gets the next u8 byte off the array, AND increments our index by 1
       let next: Result<Vec<u8>, DhcpMessageParseError> =
@@ -200,10 +198,11 @@ impl DhcpMessage {
             let dhcp_message_type_len =
               Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
             let dhcp_message_type =
-              Self::take_next(&self, buf, &mut current_index, dhcp_message_type_len.into());
+              Self::take_next(&self, buf, &mut current_index, dhcp_message_type_len.into())
+                .unwrap()[0];
             self.options.insert(
               "MESSAGETYPE".to_string(),
-              DhcpOption::MessageType(DhcpMessageType::from_u8(dhcp_message_type.unwrap()[0])),
+              DhcpOption::MessageType(DhcpMessageType::from_u8(dhcp_message_type)),
             );
           }
           0x01 => {
