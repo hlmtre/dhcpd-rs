@@ -75,6 +75,11 @@ pub(crate) struct DhcpMessage {
 }
 
 #[derive(Debug, Clone)]
+struct DhcpMessageParseError {
+  raw_byte_array: Vec<u8>,
+}
+
+#[derive(Debug, Clone)]
 pub struct RawDhcpOption {
   code: u8,
   data: Vec<u8>, // just a string of bytes we don't have to understand
@@ -173,18 +178,26 @@ impl DhcpMessage {
     // then the parts that are actually DHCP, not just bootp
     // these parts are variable length, so we have to
     // get past the four-byte magic cookie to the next option
-    let mut current_index = Self::get_options_index(&self, buf) + 4;
-    // this gets the next u8 byte off the array, AND increments our index by 1
-    let next = Self::take_next(&self, buf, &mut current_index, 1);
-    match next {
-      0x01 => {
-        let dhcp_message_type = Self::take_next(&self, buf, &mut current_index, 1);
-        self.options.insert(
-          "MESSAGETYPE".to_string(),
-          DhcpOption::MessageType(DhcpMessageType::from_u8(dhcp_message_type)),
-        );
+    let mut current_index = Self::get_options_index(&self, buf) + 5;
+    loop {
+      // this gets the next u8 byte off the array, AND increments our index by 1
+      let next = Self::take_next(&self, buf, &mut current_index, 1);
+      match next {
+        Ok(n) => match n[0] {
+          0x01 => {
+            let dhcp_message_type = Self::take_next(&self, buf, &mut current_index, 1);
+            self.options.insert(
+              "MESSAGETYPE".to_string(),
+              DhcpOption::MessageType(DhcpMessageType::from_u8(dhcp_message_type.unwrap()[0])),
+            );
+            break;
+          }
+          _ => {
+            break;
+          }
+        },
+        Err(_) => {}
       }
-      _ => {}
     }
   }
 
@@ -193,10 +206,16 @@ impl DhcpMessage {
     buf[current_index]
   }
 
-  // take the next value off, then jump ahead the specified amount
-  fn take_next(&self, buf: &[u8], current_index: &mut usize, jump: usize) -> u8 {
+  // take the next chunk of data, advancing our index to the bit after current+len
+  fn take_next(
+    &self,
+    buf: &[u8],
+    current_index: &mut usize,
+    jump: usize,
+  ) -> Result<Vec<u8>, DhcpMessageParseError> {
+    let ret = buf[*current_index..*current_index + jump].to_vec();
     *current_index += jump;
-    buf[*current_index]
+    Ok(ret)
   }
 
   pub(crate) fn get_options_index(&self, ba: &[u8]) -> usize {
