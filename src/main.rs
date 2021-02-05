@@ -26,15 +26,10 @@ fn main() -> std::io::Result<()> {
       Ok((l, _n)) => {
         let mut d: DhcpMessage = DhcpMessage::default();
         let filled_buf: &mut [u8] = &mut buf[..l];
+        println!("received bytes {:02x?}", filled_buf);
         d.parse(filled_buf);
-        println!(
-          "received bytes {:02x?} from {:02x?}",
-          filled_buf,
-          d.format_mac()
-        );
+        println!("from {} ", d.format_mac());
         println!("DhcpMessage: {:02x?}", d);
-        let magic_cookie_index = d.get_options_index(filled_buf);
-        println!("magic cookie index: {}", magic_cookie_index);
         println!("would respond on {}", _n);
       }
       Err(_) => {}

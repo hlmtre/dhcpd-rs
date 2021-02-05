@@ -178,42 +178,61 @@ impl DhcpMessage {
     // then the parts that are actually DHCP, not just bootp
     // these parts are variable length, so we have to
     // get past the four-byte magic cookie to the next option
-    let mut current_index = Self::get_options_index(&self, buf) + 5;
+    let mut current_index = Self::get_options_index(&self, buf) + 4;
+    // the dhcp message type is option code 0x01 - which is ALSO the subnet mask option.
+    // so we grap the message type first, then iterate over the rest of the options
     loop {
       // this gets the next u8 byte off the array, AND increments our index by 1
-      /*
-      from the end of the dhcp option, grab the dhcp option type
-      then pass it in below to grab the entire value, and increment our counter to the end of the
-      option
-      */
       let next: Result<Vec<u8>, DhcpMessageParseError> =
         Self::take_next(&self, buf, &mut current_index, 1);
+      // println!("current index: {}", current_index);
+      // println!("next: {:#?}", next);
+      // println!(
+      //   "buf near current_index: {:#?}",
+      //   buf[current_index - 3..current_index + 3].to_vec()
+      // );
       match next {
         // check the first byte of the returned byte array - this tells us the dhcp option
+        // and then we just match each possible dhcp option with its length, grabbing
+        // the data and advancing to the end of it
         Ok(n) => match n[0] {
-          0x01 => {
-            let dhcp_message_type = Self::take_next(&self, buf, &mut current_index, 1);
+          0x35 => {
+            let dhcp_message_type_len =
+              Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
+            let dhcp_message_type =
+              Self::take_next(&self, buf, &mut current_index, dhcp_message_type_len.into());
             self.options.insert(
               "MESSAGETYPE".to_string(),
               DhcpOption::MessageType(DhcpMessageType::from_u8(dhcp_message_type.unwrap()[0])),
             );
           }
+          0x01 => {
+            let subnet_mask_len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
+            let fb =
+              Self::take_next(&self, buf, &mut current_index, subnet_mask_len.into()).unwrap();
+            let subnet_mask: Ipv4Addr = Ipv4Addr::new(fb[0], fb[1], fb[2], fb[3]);
+            self.options.insert(
+              "SUBNET_MASK".to_string(),
+              DhcpOption::SubnetMask(subnet_mask),
+            );
+          }
           0x32 => {
             let request_len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
-            println!("next chunk is {} bytes long", request_len);
             let four_bee =
               Self::take_next(&self, buf, &mut current_index, request_len.into()).unwrap();
             let ip: Ipv4Addr = Ipv4Addr::new(four_bee[0], four_bee[1], four_bee[2], four_bee[3]);
-            println!("client requested ip: {}", ip);
+            self.options.insert(
+              "REQUESTED_IP".to_string(),
+              DhcpOption::RequestedIpAddress(ip),
+            );
           }
           0x0c => {
             let hostname_len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
-            println!("hostname len: {}", hostname_len);
             let hostname =
               Self::take_next(&self, buf, &mut current_index, hostname_len.into()).unwrap();
-            println!(
-              "client says it's {}",
-              std::str::from_utf8(&hostname).unwrap()
+            self.options.insert(
+              "HOSTNAME".to_string(),
+              DhcpOption::Hostname(std::str::from_utf8(&hostname).unwrap().to_string()),
             );
           }
           _ => {
