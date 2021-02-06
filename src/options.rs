@@ -194,6 +194,31 @@ impl DhcpMessage {
         // and then we just match each possible dhcp option with its length, grabbing
         // the data and advancing to the end of it
         Ok(n) => match n[0] {
+          // specified routers, r >= 1
+          0x03 => {
+            let rlen = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
+            let rb = Self::take_next(&self, buf, &mut current_index, rlen.into()).unwrap();
+            if rlen % 4 != 0 {
+              eprintln!("malformed router! {:?}", rb);
+              break;
+            }
+            let mut router_vec: Vec<Ipv4Addr> = Vec::new();
+            for x in 0..rlen {
+              if x % 4 == 0 || x == 0 {
+                let r = Ipv4Addr::new(
+                  rb[usize::from(x)],
+                  rb[usize::from(x) + 1],
+                  rb[usize::from(x) + 2],
+                  rb[usize::from(x) + 3],
+                );
+                router_vec.push(r);
+              }
+            }
+            self
+              .options
+              .insert("ROUTERS".to_string(), DhcpOption::Router(router_vec));
+          }
+          // dec53: dhcp message type
           0x35 => {
             let dhcp_message_type_len =
               Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
@@ -205,6 +230,7 @@ impl DhcpMessage {
               DhcpOption::MessageType(DhcpMessageType::from_u8(dhcp_message_type)),
             );
           }
+          // subnet mask
           0x01 => {
             let subnet_mask_len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
             let fb =
@@ -215,6 +241,7 @@ impl DhcpMessage {
               DhcpOption::SubnetMask(subnet_mask),
             );
           }
+          // requested IP address
           0x32 => {
             let request_len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
             let four_bee =
@@ -225,6 +252,7 @@ impl DhcpMessage {
               DhcpOption::RequestedIpAddress(ip),
             );
           }
+          // dec12 hostname
           0x0c => {
             let hostname_len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
             let hostname =
