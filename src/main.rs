@@ -25,11 +25,17 @@ fn main() -> std::io::Result<()> {
       "--help" | "-h" => {
         help();
       }
+      "--domain" => {
+        domain = args[counter + 1].clone();
+      }
+      "--leasetime" => {
+        lease_time = args[counter + 1].clone();
+      }
       "--range" | "-r" => {
         let l: Vec<&str> = args[counter + 1].split(",").collect();
         for x in l {
           if x.len() > 0 {
-            dhcp_range.push(match x.parse() {
+            dhcp_range.push(match x.parse::<Ipv4Addr>() {
               Ok(a) => a,
               _ => {
                 error("IP range parse error!");
@@ -43,7 +49,7 @@ fn main() -> std::io::Result<()> {
         let l: Vec<&str> = args[counter + 1].split(",").collect();
         for x in l {
           if x.len() > 0 {
-            dns_servers.push(match x.parse() {
+            dns_servers.push(match x.parse::<Ipv4Addr>() {
               Ok(a) => a,
               _ => {
                 error("DNS servers parse error!");
@@ -108,14 +114,21 @@ fn error(e: &str) {
 
 fn help() {
   let help_string = r#"
-  usage: dhcpd-rs <flags>
-  -h, --help : this help message
-  --address : <address> (address to bind to).
-  --debug : debug (don't background, prints debugging output).
-  --range : range to assign to clients (<192.168.5.50, 192.168.5.150>, for example).
-  --dns : dns servers to advertise (<192.168.5.4, 192.168.5.5>, for example).
-  --domain : domain to advertise (for clients to append to otherwise-unqualified dns queries)
-  --leasetime : lease time to advertise. specify in hours (12h, 24h, 72h, etc).
+  [usage]
+    dhcpd-rs <flags>
+
+  [remarks]
+    Flags can appear in any order, but MUST be space delimited. Range and DNS servers MUST NOT
+    have spaces between them.
+
+  [flags]
+    -h, --help : this help message
+    --address : <address> (address to bind to).
+    --debug : debug (don't background, prints debugging output).
+    --range : range to assign to clients (<192.168.5.50,192.168.5.150>, for example). NO SPACES.
+    --dns : dns servers to advertise (<192.168.5.4,192.168.5.5>, for example). NO SPACES.
+    --domain : domain to advertise (for clients to append to otherwise-unqualified dns queries).
+    --leasetime : lease time to advertise. specify in hours (12h, 24h, 72h, etc).
 "#;
   println!("{}", help_string);
   std::process::exit(0);
