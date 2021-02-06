@@ -22,6 +22,9 @@ fn main() -> std::io::Result<()> {
       "--debug" | "-d" => {
         debug = true;
       }
+      "--help" | "-h" => {
+        help();
+      }
       "--range" | "-r" => {
         let l: Vec<&str> = args[counter + 1].split(",").collect();
         for x in l {
@@ -54,14 +57,18 @@ fn main() -> std::io::Result<()> {
     }
     counter += 1;
   }
-  eprintln!(
-    "listen: {:?} debug: {:?} dhcp_range: {:?} dns_servers: {:?} domain: {:?} lease: {:?}",
-    listening_address, debug, dhcp_range, dns_servers, domain, lease_time
-  );
-  std::process::exit(0);
+  if debug {
+    eprintln!(
+      "listen: {:?} debug: {:?} dhcp_range: {:?} dns_servers: {:?} domain: {:?} lease: {:?}",
+      listening_address, debug, dhcp_range, dns_servers, domain, lease_time
+    );
+  }
   let socket = UdpSocket::bind(listening_address)?;
   socket.set_nonblocking(true).unwrap();
   let _ = socket.set_broadcast(true);
+  if debug {
+    println!("listening on {}", listening_address);
+  }
   /*
   The 'options' field is now variable length. A DHCP client must be
   prepared to receive DHCP messages with an 'options' field of at least
