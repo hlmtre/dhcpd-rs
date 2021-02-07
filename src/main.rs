@@ -1,8 +1,10 @@
 mod options;
 
 use crate::options::DhcpMessage;
-use std::net::Ipv4Addr;
-use std::{env, net::UdpSocket};
+use std::{
+  env,
+  net::{Ipv4Addr, UdpSocket},
+};
 
 fn main() -> std::io::Result<()> {
   let mut listening_address = "0.0.0.0:67";
@@ -12,7 +14,9 @@ fn main() -> std::io::Result<()> {
   let mut domain = String::new();
   let mut lease_time = String::new();
 
+  // first we parse out our options to know what we're doing
   let args: Vec<String> = env::args().collect();
+  // so we can get the next arg AFTER our flag
   let mut counter: usize = 0;
   for e in &args {
     match e.as_str() {
@@ -65,7 +69,7 @@ fn main() -> std::io::Result<()> {
   }
   if debug {
     eprintln!(
-      "listen: {:?} debug: {:?} dhcp_range: {:?} dns_servers: {:?} domain: {:?} lease: {:?}",
+      "==> listen: {:?} debug: {:?} dhcp_range: {:?} dns_servers: {:?} domain: {:?} lease: {:?}",
       listening_address, debug, dhcp_range, dns_servers, domain, lease_time
     );
   }
@@ -73,7 +77,7 @@ fn main() -> std::io::Result<()> {
   socket.set_nonblocking(true).unwrap();
   let _ = socket.set_broadcast(true);
   if debug {
-    println!("listening on {}", listening_address);
+    println!("==> listening on {}", listening_address);
   }
   /*
   The 'options' field is now variable length. A DHCP client must be
@@ -94,11 +98,11 @@ fn main() -> std::io::Result<()> {
       Ok((l, _n)) => {
         let mut d: DhcpMessage = DhcpMessage::default();
         let filled_buf: &mut [u8] = &mut buf[..l];
-        println!("received bytes {:02x?}", filled_buf);
+        println!("==> received bytes {:02x?}", filled_buf);
         d.parse(filled_buf);
         println!("from {} ", d.format_mac());
-        println!("DhcpMessage: {:02x?}", d);
-        println!("would respond on {}", _n);
+        println!("==> DhcpMessage: {:02x?}", d);
+        println!("==> would respond on {}", _n);
       }
       Err(_) => {}
     }
