@@ -322,8 +322,8 @@ impl DhcpMessage {
       let dhcp_server_id_len: u8 = 4;
       let dhcp_server_id_value: [u8; 4] = Ipv4Addr::new(192, 168, 122, 1).octets();
       let lease_time_option: u8 = 51;
-      let lease_time_len: u8 = 2;
-      let mut lease_time: u16 = 0x7080;
+      let lease_time_len: u8 = 4;
+      let mut lease_time: u32 = 28800;
       let subnet_mask_option: u8 = 0x01;
       let subnet_mask_len: u8 = 4;
       let subnet_mask: [u8; 4] = Ipv4Addr::new(255, 255, 255, 0).octets();
@@ -342,9 +342,22 @@ impl DhcpMessage {
       response.append(&mut yiaddr.to_vec());
       response.append(&mut siaddr.to_vec());
       response.append(&mut giaddr.to_vec());
+      let mut chaddr_paddr = Vec::with_capacity(16 - chaddr.len());
+      // they gotta be padded out to fill expected bootp field size ...
+      // chaddr should be 16 bytes...
+      for _i in 0..chaddr_paddr.capacity() {
+        chaddr_paddr.push(0);
+      }
       response.append(&mut chaddr);
+      response.append(&mut chaddr_paddr);
       let mut e = sname.as_bytes().to_vec();
+      // and server name 64 bytes...
+      let mut pad = Vec::with_capacity(64 - e.len());
+      for _i in 0..pad.capacity() {
+        pad.push(0);
+      }
       response.append(&mut e);
+      response.append(&mut pad);
       response.append(&mut file.to_vec());
       if response.len() < 236 {
         loop {
