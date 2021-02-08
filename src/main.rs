@@ -103,6 +103,11 @@ fn main() -> std::io::Result<()> {
         println!("from {} ", d.format_mac());
         println!("==> DhcpMessage: {:02x?}", d);
         println!("==> would respond on {}", _n);
+        let x = d.construct_response();
+        eprintln!("{:02x?}", x);
+        let sending_socket = UdpSocket::bind("192.168.122.1:68")?;
+        let _ = sending_socket.set_broadcast(true);
+        let _ = sending_socket.send(&x);
       }
       Err(_) => {}
     }

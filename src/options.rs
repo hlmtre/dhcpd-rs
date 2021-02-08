@@ -296,7 +296,86 @@ impl DhcpMessage {
     Ok(ret)
   }
 
-  fn construct_response(&self, incoming: DhcpMessage) -> Vec<u8> {}
+  pub(crate) fn construct_response(&self) -> Vec<u8> {
+    let mut response: Vec<u8> = Vec::new();
+    // self request! a-WOOOGAH! a-WOOOGAH!
+    if self.op == 1 {
+      let op: u8 = 0x02; // response
+      let htype: u8 = self.htype; // ethernet
+      let hlen: u8 = self.hlen; // hardware len
+      let xid = self.xid;
+      let secs: u16 = 0;
+      let flags: u16 = 0b0000_0001_0000_0000;
+      let ciaddr: [u8; 4] = Ipv4Addr::new(192, 168, 122, 12).octets();
+      let siaddr: [u8; 4] = Ipv4Addr::new(0, 0, 0, 0).octets();
+      let giaddr: [u8; 4] = Ipv4Addr::new(0, 0, 0, 0).octets();
+      let mut chaddr = self.chaddr.clone();
+      let sname: &str = "dhcpd-rs.lan.zero9f9.com";
+      let file: [u8; 128] = [0; 128];
+      let magic_cookie = MAGIC_COOKIE;
+      let offer: u8 = 53;
+      let offer_len: u8 = 1;
+      let offer_value: u8 = 2;
+      let dhcp_server_id: u8 = 54;
+      let dhcp_server_id_len: u8 = 4;
+      let dhcp_server_id_value: [u8; 4] = Ipv4Addr::new(192, 168, 122, 1).octets();
+      let lease_time_option: u8 = 51;
+      let lease_time_len: u8 = 2;
+      let mut lease_time: u16 = 0x7080;
+      let subnet_mask_option: u8 = 0x01;
+      let subnet_mask_len: u8 = 4;
+      let subnet_mask: [u8; 4] = Ipv4Addr::new(255, 255, 255, 0).octets();
+      let router_option: u8 = 3;
+      let router_option_len: u8 = 4;
+      let router_option_value: [u8; 4] = Ipv4Addr::new(192, 168, 122, 1).octets();
+      let option_end: u8 = 255;
+      response.push(op);
+      response.push(htype);
+      response.push(hlen);
+      Self::push_byte_vec_from_u32(&self, &mut response, xid);
+      Self::push_byte_vec_from_u16(&self, &mut response, secs);
+      Self::push_byte_vec_from_u16(&self, &mut response, flags);
+      response.append(&mut ciaddr.to_vec());
+      response.append(&mut siaddr.to_vec());
+      response.append(&mut giaddr.to_vec());
+      response.append(&mut chaddr);
+      let mut e = sname.as_bytes().to_vec();
+      response.append(&mut e);
+      response.append(&mut file.to_vec());
+      // whew, we're done with bootp. on to dhcp!
+      response.append(&mut magic_cookie.to_vec());
+      response.push(offer);
+      response.push(offer_len);
+      response.push(offer_value);
+      response.push(dhcp_server_id);
+      response.push(dhcp_server_id_len);
+      response.append(&mut dhcp_server_id_value.to_vec());
+      response.push(lease_time_option);
+      response.push(lease_time_len);
+      response.append(&mut lease_time.to_be_bytes().to_vec());
+      response.push(subnet_mask_option);
+      response.push(subnet_mask_len);
+      response.append(&mut subnet_mask.to_vec());
+      response.push(router_option);
+      response.push(router_option_len);
+      response.append(&mut router_option_value.to_vec());
+      response.push(option_end);
+      return response;
+    }
+    return response;
+  }
+
+  fn push_byte_vec_from_u32(&self, vec: &mut Vec<u8>, obj: u32) {
+    for b in &obj.to_be_bytes() {
+      vec.push(*b);
+    }
+  }
+
+  fn push_byte_vec_from_u16(&self, vec: &mut Vec<u8>, obj: u16) {
+    for b in &obj.to_be_bytes() {
+      vec.push(*b);
+    }
+  }
 
   fn get_ipv4_array(
     &self,
