@@ -137,10 +137,8 @@ impl fmt::Display for DhcpMessage {
       f,
       "
        message type: {}
-       mac length:   {}
        mac address:  {}",
       s,
-      self.hlen,
       self.format_mac()
     )
   }
@@ -194,29 +192,36 @@ impl DhcpMessage {
         // and then we just match each possible dhcp option with its length, grabbing
         // the data and advancing to the end of it
         Ok(n) => match n[0] {
-          // specified routers, r >= 1
-          0x03 => {
-            let rlen = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
-            let rb = Self::take_next(&self, buf, &mut current_index, rlen.into()).unwrap();
-            if rlen % 4 != 0 {
-              eprintln!("malformed router! {:?}", rb);
-              break;
-            }
-            let mut router_vec: Vec<Ipv4Addr> = Vec::new();
-            for x in 0..rlen {
-              if x % 4 == 0 || x == 0 {
-                let r = Ipv4Addr::new(
-                  rb[usize::from(x)],
-                  rb[usize::from(x) + 1],
-                  rb[usize::from(x) + 2],
-                  rb[usize::from(x) + 3],
-                );
-                router_vec.push(r);
+          // specified dns servers, r >= 1
+          0x05 => {
+            let len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
+            let b = Self::take_next(&self, buf, &mut current_index, len.into()).unwrap();
+            match Self::get_ipv4_array(&self, len.into(), b) {
+              Ok(a) => {
+                self
+                  .options
+                  .insert("DNS_SERVERS".to_string(), DhcpOption::DomainNameServer(a));
+              }
+              Err(e) => {
+                eprintln!("{:#?}", e);
+                continue;
               }
             }
-            self
-              .options
-              .insert("ROUTERS".to_string(), DhcpOption::Router(router_vec));
+          }
+          0x03 => {
+            let len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
+            let b = Self::take_next(&self, buf, &mut current_index, len.into()).unwrap();
+            match Self::get_ipv4_array(&self, len.into(), b) {
+              Ok(a) => {
+                self
+                  .options
+                  .insert("ROUTERS".to_string(), DhcpOption::Router(a));
+              }
+              Err(e) => {
+                eprintln!("{:#?}", e);
+                continue;
+              }
+            }
           }
           // dec53: dhcp message type
           0x35 => {
@@ -242,6 +247,7 @@ impl DhcpMessage {
             );
           }
           // requested IP address
+          // dec50
           0x32 => {
             let request_len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
             let four_bee =
@@ -276,7 +282,9 @@ impl DhcpMessage {
     buf[current_index]
   }
 
-  // take the next chunk of data, advancing our index to the bit after current+len
+  /// take a reference to the dhcp message buffer, read everything to jump length,
+  /// and increment our current index by jump length.
+  /// returns the byte array read as a vector.
   fn take_next(
     &self,
     buf: &[u8],
@@ -286,6 +294,34 @@ impl DhcpMessage {
     let ret = buf[*current_index..*current_index + jump].to_vec();
     *current_index += jump;
     Ok(ret)
+  }
+
+  fn construct_response(&self, incoming: DhcpMessage) -> Vec<u8> {}
+
+  fn get_ipv4_array(
+    &self,
+    total_len: usize,
+    ipv4_octets: Vec<u8>,
+  ) -> Result<Vec<Ipv4Addr>, DhcpMessageParseError> {
+    if total_len % 4 != 0 {
+      let dmpe: DhcpMessageParseError = DhcpMessageParseError {
+        raw_byte_array: ipv4_octets,
+      };
+      return Err(dmpe);
+    }
+    let mut ovec: Vec<Ipv4Addr> = Vec::new();
+    for x in 0..total_len {
+      if x % 4 == 0 || x == 0 {
+        let r: Ipv4Addr = Ipv4Addr::new(
+          ipv4_octets[usize::from(x)],
+          ipv4_octets[usize::from(x) + 1],
+          ipv4_octets[usize::from(x) + 2],
+          ipv4_octets[usize::from(x) + 3],
+        );
+        ovec.push(r);
+      }
+    }
+    Ok(ovec)
   }
 
   pub(crate) fn get_options_index(&self, ba: &[u8]) -> usize {
