@@ -57,7 +57,7 @@ const MAGIC_COOKIE: [u8; 4] = [0x63, 0x82, 0x53, 0x63];
 ///
 #[derive(Default, Debug, Clone)]
 pub(crate) struct DhcpMessage {
-  op: u8,
+  pub op: u8,
   htype: u8,
   hlen: u8,
   hops: u8,
@@ -115,7 +115,7 @@ pub(crate) enum DhcpMessageType {
 }
 
 impl DhcpMessageType {
-  fn from_u8(value: u8) -> DhcpMessageType {
+  pub(crate) fn from_u8(value: u8) -> DhcpMessageType {
     match value {
       1 => DhcpMessageType::DHCPDISCOVER,
       2 => DhcpMessageType::DHCPOFFER,
@@ -303,10 +303,12 @@ impl DhcpMessage {
       let op: u8 = 0x02; // response
       let htype: u8 = self.htype; // ethernet
       let hlen: u8 = self.hlen; // hardware len
+      let hops: u8 = 0;
       let xid = self.xid;
       let secs: u16 = 0;
       let flags: u16 = 0b0000_0001_0000_0000;
-      let ciaddr: [u8; 4] = Ipv4Addr::new(192, 168, 122, 12).octets();
+      let ciaddr: [u8; 4] = Ipv4Addr::new(0, 0, 0, 0).octets();
+      let yiaddr: [u8; 4] = Ipv4Addr::new(192, 168, 122, 12).octets();
       let siaddr: [u8; 4] = Ipv4Addr::new(0, 0, 0, 0).octets();
       let giaddr: [u8; 4] = Ipv4Addr::new(0, 0, 0, 0).octets();
       let mut chaddr = self.chaddr.clone();
@@ -332,18 +334,29 @@ impl DhcpMessage {
       response.push(op);
       response.push(htype);
       response.push(hlen);
+      response.push(hops);
       Self::push_byte_vec_from_u32(&self, &mut response, xid);
       Self::push_byte_vec_from_u16(&self, &mut response, secs);
       Self::push_byte_vec_from_u16(&self, &mut response, flags);
       response.append(&mut ciaddr.to_vec());
+      response.append(&mut yiaddr.to_vec());
       response.append(&mut siaddr.to_vec());
       response.append(&mut giaddr.to_vec());
       response.append(&mut chaddr);
       let mut e = sname.as_bytes().to_vec();
       response.append(&mut e);
       response.append(&mut file.to_vec());
+      if response.len() < 236 {
+        loop {
+          response.push(0);
+          if response.len() >= 236 {
+            break;
+          }
+        }
+      }
       // whew, we're done with bootp. on to dhcp!
       response.append(&mut magic_cookie.to_vec());
+      assert_eq!(response.len(), 240);
       response.push(offer);
       response.push(offer_len);
       response.push(offer_value);
@@ -360,6 +373,14 @@ impl DhcpMessage {
       response.push(router_option_len);
       response.append(&mut router_option_value.to_vec());
       response.push(option_end);
+      if response.len() < 276 {
+        loop {
+          response.push(0);
+          if response.len() >= 276 {
+            break;
+          }
+        }
+      }
       return response;
     }
     return response;

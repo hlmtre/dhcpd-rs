@@ -1,6 +1,7 @@
 mod options;
 
-use crate::options::DhcpMessage;
+use crate::options::{DhcpMessage, DhcpMessageType};
+use std::net::SocketAddr;
 use std::{
   env,
   net::{Ipv4Addr, UdpSocket},
@@ -75,7 +76,15 @@ fn main() -> std::io::Result<()> {
   }
   let socket = UdpSocket::bind(listening_address)?;
   socket.set_nonblocking(true).unwrap();
-  let _ = socket.set_broadcast(true);
+  let r = socket.set_broadcast(true);
+  match r {
+    Ok(_) => {
+      println!("able to set broadcast!");
+    }
+    Err(_) => {
+      println!("unable to set broadcast poooooooooooooo");
+    }
+  }
   if debug {
     println!("==> listening on {}", listening_address);
   }
@@ -89,25 +98,28 @@ fn main() -> std::io::Result<()> {
   'maximum DHCP message size' option.  The options field may be further
   extended into the 'file' and 'sname' fields.
 
-  creates an array of length 64 u8s and pre-sets each to 0
+  creates an array of length 576 u8s and pre-sets each to 0
   */
   //this is equivalent to vec![0, 576];
   let mut buf = [0 as u8; 576];
+  let mut x = Vec::new();
   loop {
     match socket.recv_from(&mut buf) {
       Ok((l, _n)) => {
         let mut d: DhcpMessage = DhcpMessage::default();
         let filled_buf: &mut [u8] = &mut buf[..l];
-        println!("==> received bytes {:02x?}", filled_buf);
+        //println!("==> received bytes {:02x?}", filled_buf);
         d.parse(filled_buf);
-        println!("from {} ", d.format_mac());
-        println!("==> DhcpMessage: {:02x?}", d);
-        println!("==> would respond on {}", _n);
-        let x = d.construct_response();
+        //println!("from {} ", d.format_mac());
+        println!("==> DhcpMessage: {:02x?}", DhcpMessageType::from_u8(d.op));
+        x = d.construct_response();
         eprintln!("{:02x?}", x);
-        let sending_socket = UdpSocket::bind("192.168.122.1:68")?;
-        let _ = sending_socket.set_broadcast(true);
-        let _ = sending_socket.send(&x);
+        let u = UdpSocket::bind("192.168.254.254:0").unwrap();
+        let _ = u.set_broadcast(true);
+        let num_bytes_written = u
+          .send_to(&x, "255.255.255.255:68")
+          .expect("couldn't send to broadcast :(");
+        println!("wrote {}", num_bytes_written);
       }
       Err(_) => {}
     }
