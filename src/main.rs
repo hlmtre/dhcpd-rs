@@ -107,9 +107,10 @@ fn main() -> std::io::Result<()> {
         let filled_buf: &mut [u8] = &mut buf[..l];
         d.parse(filled_buf);
         println!(
-          "==> DhcpMessage: {:?} from {}",
+          "==> {:?} from {}; prl: {:02x?}",
           d.options.get("MESSAGETYPE").unwrap(),
-          d.format_mac()
+          d.format_mac(),
+          d.options.get("PARAMETER_REQUEST_LIST")
         );
         let x = d.construct_response();
         let u = UdpSocket::bind(bind_address)?;

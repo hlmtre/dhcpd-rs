@@ -202,6 +202,7 @@ impl DhcpMessage {
               }
             }
           }
+          // routers
           0x03 => {
             let len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
             let b = Self::take_next(&self, buf, &mut current_index, len.into()).unwrap();
@@ -227,6 +228,19 @@ impl DhcpMessage {
             self.options.insert(
               "MESSAGETYPE".to_string(),
               DhcpOption::MessageType(DhcpMessageType::from_u8(dhcp_message_type)),
+            );
+          }
+          // dec55: parameter request list
+          0x37 => {
+            let prl_len: usize =
+              Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0].into();
+            let mut prl_vec: Vec<u8> = Vec::new();
+            for _x in current_index..current_index + prl_len {
+              prl_vec.push(buf[_x]);
+            }
+            self.options.insert(
+              "PARAMETER_REQUEST_LIST".to_string(),
+              DhcpOption::ParameterRequestList(prl_vec),
             );
           }
           // subnet mask
