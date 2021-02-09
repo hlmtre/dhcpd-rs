@@ -1,14 +1,14 @@
 mod options;
 
 use crate::options::{DhcpMessage, DhcpMessageType};
-use std::net::SocketAddr;
 use std::{
   env,
-  net::{Ipv4Addr, UdpSocket},
+  net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket},
 };
 
 fn main() -> std::io::Result<()> {
-  let mut listening_address = "0.0.0.0:67";
+  let listening_address = "0.0.0.0:67";
+  let mut bind_address: SocketAddr = "0.0.0.0:68".parse::<SocketAddr>().unwrap();
   let mut debug = false;
   let mut dhcp_range: Vec<Ipv4Addr> = Vec::new();
   let mut dns_servers: Vec<Ipv4Addr> = Vec::new();
@@ -22,7 +22,12 @@ fn main() -> std::io::Result<()> {
   for e in &args {
     match e.as_str() {
       "--address" | "-a" => {
-        listening_address = args[counter + 1].as_str();
+        bind_address.set_ip(std::net::IpAddr::V4(
+          args[counter + 1]
+            .as_str()
+            .parse::<Ipv4Addr>()
+            .expect("Invalid binding address!"),
+        ));
       }
       "--debug" | "-d" => {
         debug = true;
@@ -33,7 +38,7 @@ fn main() -> std::io::Result<()> {
       "--domain" => {
         domain = args[counter + 1].clone();
       }
-      "--leasetime" => {
+      "--leasetime" | "--lease" => {
         lease_time = args[counter + 1].clone();
       }
       "--range" | "-r" => {
@@ -76,17 +81,10 @@ fn main() -> std::io::Result<()> {
   }
   let socket = UdpSocket::bind(listening_address)?;
   socket.set_nonblocking(true).unwrap();
-  let r = socket.set_broadcast(true);
-  match r {
-    Ok(_) => {
-      println!("able to set broadcast!");
-    }
-    Err(_) => {
-      println!("unable to set broadcast poooooooooooooo");
-    }
-  }
+  let _ = socket.set_broadcast(true);
   if debug {
-    println!("==> listening on {}", listening_address);
+    println!("==> bound to {}", bind_address);
+    println!("==> listening on {}", "0.0.0.0:67");
   }
   /*
   The 'options' field is now variable length. A DHCP client must be
@@ -102,24 +100,32 @@ fn main() -> std::io::Result<()> {
   */
   //this is equivalent to vec![0, 576];
   let mut buf = [0 as u8; 576];
-  let mut x = Vec::new();
   loop {
     match socket.recv_from(&mut buf) {
       Ok((l, _n)) => {
         let mut d: DhcpMessage = DhcpMessage::default();
         let filled_buf: &mut [u8] = &mut buf[..l];
-        //println!("==> received bytes {:02x?}", filled_buf);
         d.parse(filled_buf);
-        //println!("from {} ", d.format_mac());
-        println!("==> DhcpMessage: {:02x?}", DhcpMessageType::from_u8(d.op));
-        x = d.construct_response();
-        eprintln!("{:02x?}", x);
-        let u = UdpSocket::bind("192.168.254.254:0").unwrap();
+        println!(
+          "==> DhcpMessage: {:?} from {}",
+          d.options.get("MESSAGETYPE").unwrap(),
+          d.format_mac()
+        );
+        let x = d.construct_response();
+        let u = UdpSocket::bind(bind_address)?;
+        let source = Ipv4Addr::from(d.ciaddr);
+        // if the client specifies an IP (renewing), unicast to that
+        // otherwise we have to broadcast (DHCPDISCOVER, DHCPREQUEST)
+        let target = if source != Ipv4Addr::new(0, 0, 0, 0) {
+          source
+        } else {
+          Ipv4Addr::new(255, 255, 255, 255)
+        };
+        let target_socket = SocketAddrV4::new(target, 68);
         let _ = u.set_broadcast(true);
-        let num_bytes_written = u
-          .send_to(&x, "255.255.255.255:68")
+        let _ = u
+          .send_to(&x, target_socket)
           .expect("couldn't send to broadcast :(");
-        println!("wrote {}", num_bytes_written);
       }
       Err(_) => {}
     }

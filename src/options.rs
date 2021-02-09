@@ -61,17 +61,17 @@ pub(crate) struct DhcpMessage {
   htype: u8,
   hlen: u8,
   hops: u8,
-  xid: u32,
+  pub xid: u32,
   secs: u16,
   flags: u16,
-  ciaddr: u32,
-  yiaddr: u32,
+  pub ciaddr: u32,
+  pub yiaddr: u32,
   siaddr: u32,
   giaddr: u32,
-  chaddr: Vec<u8>,
+  pub chaddr: Vec<u8>,
   sname: usize,
   file: usize,
-  options: HashMap<String, DhcpOption>,
+  pub options: HashMap<String, DhcpOption>,
 }
 
 #[derive(Debug, Clone)]
