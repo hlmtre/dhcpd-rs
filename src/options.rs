@@ -55,7 +55,7 @@ const MAGIC_COOKIE: [u8; 4] = [0x63, 0x82, 0x53, 0x63];
 ///  file (128): boot filename.
 ///  options (variable): dhcp options, variable length.
 ///
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, PartialEq)]
 pub(crate) struct DhcpMessage {
   pub op: u8,
   htype: u8,
@@ -79,13 +79,13 @@ struct DhcpMessageParseError {
   raw_byte_array: Vec<u8>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RawDhcpOption {
   code: u8,
   data: Vec<u8>, // just a string of bytes we don't have to understand
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum DhcpOption {
   MessageType(DhcpMessageType),
   ServerIdentifier(Ipv4Addr),
@@ -100,7 +100,7 @@ pub(crate) enum DhcpOption {
   Unrecognized(RawDhcpOption),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[repr(u8)]
 pub(crate) enum DhcpMessageType {
   UNKNOWN = 0,
@@ -181,12 +181,6 @@ impl DhcpMessage {
       // this gets the next u8 byte off the array, AND increments our index by 1
       let next: Result<Vec<u8>, DhcpMessageParseError> =
         Self::take_next(&self, buf, &mut current_index, 1);
-      // println!("current index: {}", current_index);
-      // println!("next: {:#?}", next);
-      // println!(
-      //   "buf near current_index: {:#?}",
-      //   buf[current_index - 3..current_index + 3].to_vec()
-      // );
       match next {
         // check the first byte of the returned byte array - this tells us the dhcp option
         // and then we just match each possible dhcp option with its length, grabbing
@@ -297,26 +291,19 @@ impl DhcpMessage {
   }
 
   pub(crate) fn construct_response(&self) -> Vec<u8> {
-    let mut response: Vec<u8> = Vec::new();
-    // self request! a-WOOOGAH! a-WOOOGAH!
-    if self.op == 1 {
-      let op: u8 = 0x02; // response
-      let htype: u8 = self.htype; // ethernet
-      let hlen: u8 = self.hlen; // hardware len
-      let hops: u8 = 0;
-      let xid = self.xid;
-      let secs: u16 = 0;
-      let flags: u16 = 0b0000_0001_0000_0000;
-      let ciaddr: [u8; 4] = Ipv4Addr::new(0, 0, 0, 0).octets();
-      let yiaddr: [u8; 4] = Ipv4Addr::new(192, 168, 122, 12).octets();
-      let siaddr: [u8; 4] = Ipv4Addr::new(0, 0, 0, 0).octets();
-      let giaddr: [u8; 4] = Ipv4Addr::new(0, 0, 0, 0).octets();
-      let mut chaddr = self.chaddr.clone();
-      let sname: &str = "dhcpd-rs.lan.zero9f9.com";
-      let file: [u8; 128] = [0; 128];
-      let magic_cookie = MAGIC_COOKIE;
+    // a DISCOVER! a-WOOOGAH! a-WOOOGAH!
+    // build our first response, and offer the client an IP
+    // this is followed by the client going 'sounds good, gimme' (DHCPREQUEST)
+    // and finally our DHCPACK
+    let magic_cookie = MAGIC_COOKIE;
+    let mut response = self.build_bootp_packet();
+    if *self.options.get("MESSAGETYPE").unwrap()
+      == DhcpOption::MessageType(DhcpMessageType::DHCPDISCOVER)
+    {
+      response = self.build_bootp_packet();
       let offer: u8 = 53;
       let offer_len: u8 = 1;
+      // DHCPOFFER
       let offer_value: u8 = 2;
       let dhcp_server_id: u8 = 54;
       let dhcp_server_id_len: u8 = 4;
@@ -331,42 +318,6 @@ impl DhcpMessage {
       let router_option_len: u8 = 4;
       let router_option_value: [u8; 4] = Ipv4Addr::new(192, 168, 122, 1).octets();
       let option_end: u8 = 255;
-      response.push(op);
-      response.push(htype);
-      response.push(hlen);
-      response.push(hops);
-      Self::push_byte_vec_from_u32(&self, &mut response, xid);
-      Self::push_byte_vec_from_u16(&self, &mut response, secs);
-      Self::push_byte_vec_from_u16(&self, &mut response, flags);
-      response.append(&mut ciaddr.to_vec());
-      response.append(&mut yiaddr.to_vec());
-      response.append(&mut siaddr.to_vec());
-      response.append(&mut giaddr.to_vec());
-      let mut chaddr_paddr = Vec::with_capacity(16 - chaddr.len());
-      // they gotta be padded out to fill expected bootp field size ...
-      // chaddr should be 16 bytes...
-      for _i in 0..chaddr_paddr.capacity() {
-        chaddr_paddr.push(0);
-      }
-      response.append(&mut chaddr);
-      response.append(&mut chaddr_paddr);
-      let mut e = sname.as_bytes().to_vec();
-      // and server name 64 bytes...
-      let mut pad = Vec::with_capacity(64 - e.len());
-      for _i in 0..pad.capacity() {
-        pad.push(0);
-      }
-      response.append(&mut e);
-      response.append(&mut pad);
-      response.append(&mut file.to_vec());
-      if response.len() < 236 {
-        loop {
-          response.push(0);
-          if response.len() >= 236 {
-            break;
-          }
-        }
-      }
       // whew, we're done with bootp. on to dhcp!
       response.append(&mut magic_cookie.to_vec());
       assert_eq!(response.len(), 240);
@@ -394,9 +345,110 @@ impl DhcpMessage {
           }
         }
       }
-      return response;
+    } else if *self.options.get("MESSAGETYPE").unwrap()
+      == DhcpOption::MessageType(DhcpMessageType::DHCPREQUEST)
+    {
+      let offer: u8 = 53;
+      let offer_len: u8 = 1;
+      // DHCPACK
+      let offer_value: u8 = 5;
+      let dhcp_server_id: u8 = 54;
+      let dhcp_server_id_len: u8 = 4;
+      let dhcp_server_id_value: [u8; 4] = Ipv4Addr::new(192, 168, 122, 1).octets();
+      let lease_time_option: u8 = 51;
+      let lease_time_len: u8 = 4;
+      let mut lease_time: u32 = 28800;
+      let subnet_mask_option: u8 = 0x01;
+      let subnet_mask_len: u8 = 4;
+      let subnet_mask: [u8; 4] = Ipv4Addr::new(255, 255, 255, 0).octets();
+      let router_option: u8 = 3;
+      let router_option_len: u8 = 4;
+      let router_option_value: [u8; 4] = Ipv4Addr::new(192, 168, 122, 1).octets();
+      let option_end: u8 = 255;
+      // whew, we're done with bootp. on to dhcp!
+      response.append(&mut magic_cookie.to_vec());
+      assert_eq!(response.len(), 240);
+      response.push(offer);
+      response.push(offer_len);
+      response.push(offer_value);
+      response.push(dhcp_server_id);
+      response.push(dhcp_server_id_len);
+      response.append(&mut dhcp_server_id_value.to_vec());
+      response.push(lease_time_option);
+      response.push(lease_time_len);
+      response.append(&mut lease_time.to_be_bytes().to_vec());
+      response.push(subnet_mask_option);
+      response.push(subnet_mask_len);
+      response.append(&mut subnet_mask.to_vec());
+      response.push(router_option);
+      response.push(router_option_len);
+      response.append(&mut router_option_value.to_vec());
+      response.push(option_end);
+      if response.len() < 276 {
+        loop {
+          response.push(0);
+          if response.len() >= 276 {
+            break;
+          }
+        }
+      }
     }
     return response;
+  }
+
+  fn build_bootp_packet(&self) -> Vec<u8> {
+    let mut response: Vec<u8> = Vec::new();
+    let op: u8 = 0x02; // response
+    let htype: u8 = self.htype; // ethernet
+    let hlen: u8 = self.hlen; // hardware len
+    let hops: u8 = 0;
+    let xid = self.xid;
+    let secs: u16 = 0;
+    let flags: u16 = 0b0000_0001_0000_0000;
+    let ciaddr: [u8; 4] = Ipv4Addr::new(0, 0, 0, 0).octets();
+    let yiaddr: [u8; 4] = Ipv4Addr::new(192, 168, 122, 12).octets();
+    let siaddr: [u8; 4] = Ipv4Addr::new(0, 0, 0, 0).octets();
+    let giaddr: [u8; 4] = Ipv4Addr::new(0, 0, 0, 0).octets();
+    let mut chaddr = self.chaddr.clone();
+    let sname: &str = "dhcpd-rs.lan.zero9f9.com";
+    let file: [u8; 128] = [0; 128];
+    response.push(op);
+    response.push(htype);
+    response.push(hlen);
+    response.push(hops);
+    Self::push_byte_vec_from_u32(&self, &mut response, xid);
+    Self::push_byte_vec_from_u16(&self, &mut response, secs);
+    Self::push_byte_vec_from_u16(&self, &mut response, flags);
+    response.append(&mut ciaddr.to_vec());
+    response.append(&mut yiaddr.to_vec());
+    response.append(&mut siaddr.to_vec());
+    response.append(&mut giaddr.to_vec());
+    let mut chaddr_paddr = Vec::with_capacity(16 - chaddr.len());
+    // they gotta be padded out to fill expected bootp field size ...
+    // chaddr should be 16 bytes...
+    for _i in 0..chaddr_paddr.capacity() {
+      chaddr_paddr.push(0);
+    }
+    response.append(&mut chaddr);
+    response.append(&mut chaddr_paddr);
+    let mut e = sname.as_bytes().to_vec();
+    // and server name 64 bytes...
+    let mut pad = Vec::with_capacity(64 - e.len());
+    for _i in 0..pad.capacity() {
+      pad.push(0);
+    }
+    response.append(&mut e);
+    response.append(&mut pad);
+    response.append(&mut file.to_vec());
+    if response.len() < 236 {
+      loop {
+        response.push(0);
+        if response.len() >= 236 {
+          break;
+        }
+      }
+    }
+    response
   }
 
   fn push_byte_vec_from_u32(&self, vec: &mut Vec<u8>, obj: u32) {
