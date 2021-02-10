@@ -117,6 +117,7 @@ fn main() -> std::io::Result<()> {
           d.options.get("MESSAGETYPE").unwrap(),
           d.format_mac(),
         );
+        println!("{:02x?}", d);
         let x = d.construct_response(&c);
         let u = UdpSocket::bind(c.bind_address)?;
         let source = Ipv4Addr::from(d.ciaddr);

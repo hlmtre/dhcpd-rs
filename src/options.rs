@@ -160,16 +160,17 @@ impl DhcpMessage {
   }
 
   pub(crate) fn parse(&mut self, buf: &[u8]) {
+    println!("{:02x?}", buf);
     // first do the known-size parts
     self.op = buf[0];
     self.htype = buf[1];
     self.hlen = buf[2];
     self.hops = buf[3];
     self.xid = u32::from_be_bytes(buf[4..8].try_into().unwrap());
-    self.secs = u16::from_be_bytes(buf[9..11].try_into().unwrap());
-    self.flags = u16::from_be_bytes(buf[11..13].try_into().unwrap());
-    self.ciaddr = u32::from_be_bytes(buf[13..17].try_into().unwrap());
-    self.yiaddr = u32::from_be_bytes(buf[17..21].try_into().unwrap());
+    self.secs = u16::from_be_bytes(buf[8..10].try_into().unwrap());
+    self.flags = u16::from_be_bytes(buf[10..12].try_into().unwrap());
+    self.ciaddr = u32::from_be_bytes(buf[12..16].try_into().unwrap());
+    self.yiaddr = u32::from_be_bytes(buf[16..20].try_into().unwrap());
     if self.hlen == 6 {
       self.chaddr = buf[28..34].to_vec();
     } else {
@@ -387,7 +388,7 @@ impl DhcpMessage {
     let secs: u16 = 0;
     let flags: u16 = 0b0000_0001_0000_0000;
     let ciaddr: [u8; 4] = self.ciaddr.to_be_bytes();
-    let mut yiaddr: [u8; 4] = [192, 168, 122, 10];
+    let mut yiaddr: [u8; 4] = [192, 168, 122, 60];
     match self.options.get("MESSAGETYPE") {
       Some(i) => match i {
         DhcpOption::MessageType(x) => match x {
