@@ -1,20 +1,14 @@
+mod config;
 mod options;
 
-use crate::options::{DhcpMessage, DhcpMessageType};
+use crate::{config::Config, options::DhcpMessage};
 use std::{
   env,
   net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket},
 };
 
 fn main() -> std::io::Result<()> {
-  let listening_address = "0.0.0.0:67";
-  let mut bind_address: SocketAddr = "0.0.0.0:68".parse::<SocketAddr>().unwrap();
-  let mut debug = false;
-  let mut dhcp_range: Vec<Ipv4Addr> = Vec::new();
-  let mut dns_servers: Vec<Ipv4Addr> = Vec::new();
-  let mut domain = String::new();
-  let mut lease_time = String::new();
-
+  let mut c = Config::default();
   // first we parse out our options to know what we're doing
   let args: Vec<String> = env::args().collect();
   // so we can get the next arg AFTER our flag
@@ -22,7 +16,7 @@ fn main() -> std::io::Result<()> {
   for e in &args {
     match e.as_str() {
       "--address" | "-a" => {
-        bind_address.set_ip(std::net::IpAddr::V4(
+        c.bind_address.set_ip(std::net::IpAddr::V4(
           args[counter + 1]
             .as_str()
             .parse::<Ipv4Addr>()
@@ -30,22 +24,22 @@ fn main() -> std::io::Result<()> {
         ));
       }
       "--debug" | "-d" => {
-        debug = true;
+        c.debug = true;
       }
       "--help" | "-h" => {
         help();
       }
       "--domain" => {
-        domain = args[counter + 1].clone();
+        c.domain = args[counter + 1].clone();
       }
       "--leasetime" | "--lease" => {
-        lease_time = args[counter + 1].clone();
+        c.lease_time = args[counter + 1].clone();
       }
       "--range" | "-r" => {
         let l: Vec<&str> = args[counter + 1].split(",").collect();
         for x in l {
           if x.len() > 0 {
-            dhcp_range.push(match x.parse::<Ipv4Addr>() {
+            c.dhcp_range.push(match x.parse::<Ipv4Addr>() {
               Ok(a) => a,
               _ => {
                 error("IP range parse error!");
@@ -59,7 +53,7 @@ fn main() -> std::io::Result<()> {
         let l: Vec<&str> = args[counter + 1].split(",").collect();
         for x in l {
           if x.len() > 0 {
-            dns_servers.push(match x.parse::<Ipv4Addr>() {
+            c.dns_servers.push(match x.parse::<Ipv4Addr>() {
               Ok(a) => a,
               _ => {
                 error("DNS servers parse error!");
@@ -73,17 +67,15 @@ fn main() -> std::io::Result<()> {
     }
     counter += 1;
   }
-  if debug {
-    eprintln!(
-      "==> listen: {:?} debug: {:?} dhcp_range: {:?} dns_servers: {:?} domain: {:?} lease: {:?}",
-      listening_address, debug, dhcp_range, dns_servers, domain, lease_time
-    );
+  if c.debug {
+    eprintln!("==> {:?}", c);
   }
-  let socket = UdpSocket::bind(listening_address)?;
+
+  let socket = UdpSocket::bind(c.listening_address)?;
   socket.set_nonblocking(true).unwrap();
   let _ = socket.set_broadcast(true);
-  if debug {
-    println!("==> bound to {}", bind_address);
+  if c.debug {
+    println!("==> bound to {}", c.bind_address);
     println!("==> listening on {}", "0.0.0.0:67");
   }
   /*
@@ -113,7 +105,7 @@ fn main() -> std::io::Result<()> {
           d.options.get("PARAMETER_REQUEST_LIST")
         );
         let x = d.construct_response();
-        let u = UdpSocket::bind(bind_address)?;
+        let u = UdpSocket::bind(c.bind_address)?;
         let source = Ipv4Addr::from(d.ciaddr);
         // if the client specifies an IP (renewing), unicast to that
         // otherwise we have to broadcast (DHCPDISCOVER, DHCPREQUEST)
@@ -132,6 +124,7 @@ fn main() -> std::io::Result<()> {
     }
     std::thread::sleep(std::time::Duration::from_millis(10));
   }
+  #[allow(unreachable_code)]
   Ok(())
 }
 
