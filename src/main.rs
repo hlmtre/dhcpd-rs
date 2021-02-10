@@ -123,7 +123,7 @@ fn main() -> std::io::Result<()> {
         let source = Ipv4Addr::from(d.ciaddr);
         // if the client specifies an IP (renewing), unicast to that
         // otherwise we have to broadcast (DHCPDISCOVER, DHCPREQUEST)
-        let target = if source.is_unspecified() {
+        let target = if !source.is_unspecified() {
           source
         } else {
           Ipv4Addr::BROADCAST
