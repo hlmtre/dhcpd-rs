@@ -22,11 +22,41 @@ pub(crate) struct Config {
   pub dhcp_range: Vec<Ipv4Addr>,
   pub dns_servers: Vec<Ipv4Addr>,
   pub domain: String,
-  pub lease_time: String,
+  pub lease_time: u32,
 }
 
-impl Default for Config {
-  fn default() -> Self {
+fn lease_to_seconds(s: String) -> u32 {
+  let mut units = String::new();
+  for c in s.chars() {
+    if c.is_digit(10) {
+      units.push(c);
+    }
+  }
+  let units_as_int = match units.parse::<u32>() {
+    Ok(h) => h,
+    Err(_) => 12,
+  };
+  match s.clone().pop() {
+    Some(c) => match c {
+      'h' => {
+        return 60 * 60 * units_as_int;
+      }
+      'm' => {
+        return 60 * units_as_int;
+      }
+      _ => {
+        return units_as_int;
+      }
+    },
+    None => {
+      // let's just default to 12h (in seconds, durr)
+      return 28800;
+    }
+  }
+}
+
+impl Config {
+  pub(crate) fn new() -> Config {
     Config {
       debug: true,
       listening_address: "0.0.0.0:67".parse::<SocketAddr>().unwrap(),
@@ -36,39 +66,11 @@ impl Default for Config {
       dhcp_range: Vec::new(),
       dns_servers: Vec::new(),
       domain: "some.fake.lan".to_string(),
-      lease_time: "12h".to_string(),
+      lease_time: lease_to_seconds("12h".to_string()),
     }
   }
-}
 
-impl Config {
-  pub(crate) fn lease_to_seconds(&self) -> u32 {
-    let mut units = String::new();
-    for c in self.lease_time.chars() {
-      if c.is_digit(10) {
-        units.push(c);
-      }
-    }
-    let units_as_int = match units.parse::<u32>() {
-      Ok(h) => h,
-      Err(_) => 12,
-    };
-    match self.lease_time.clone().pop() {
-      Some(c) => match c {
-        'h' => {
-          return 60 * 60 * units_as_int;
-        }
-        'm' => {
-          return 60 * units_as_int;
-        }
-        _ => {
-          return units_as_int;
-        }
-      },
-      None => {
-        // let's just default to 12h (in seconds, durr)
-        return 28800;
-      }
-    }
+  pub(crate) fn set_lease(&mut self, s: String) {
+    self.lease_time = lease_to_seconds(s);
   }
 }

@@ -160,7 +160,6 @@ impl DhcpMessage {
   }
 
   pub(crate) fn parse(&mut self, buf: &[u8]) {
-    println!("{:02x?}", buf);
     // first do the known-size parts
     self.op = buf[0];
     self.htype = buf[1];
@@ -326,7 +325,7 @@ impl DhcpMessage {
     };
     let lease_time_option: u8 = 51;
     let lease_time_len: u8 = 4;
-    let lease_time: u32 = c.lease_to_seconds();
+    let lease_time: u32 = c.lease_time;
     let subnet_mask_option: u8 = 0x01;
     let subnet_mask_len: u8 = 4;
     let subnet_mask: [u8; 4] = c.subnet.octets();

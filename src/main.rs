@@ -8,7 +8,7 @@ use std::{
 };
 
 fn main() -> std::io::Result<()> {
-  let mut c = Config::default();
+  let mut c = Config::new();
   // first we parse out our options to know what we're doing
   let args: Vec<String> = env::args().collect();
   // so we can get the next arg AFTER our flag
@@ -33,7 +33,7 @@ fn main() -> std::io::Result<()> {
         c.domain = args[counter + 1].clone();
       }
       "--leasetime" | "--lease" => {
-        c.lease_time = args[counter + 1].clone();
+        c.set_lease(args[counter + 1].clone());
       }
       "--range" | "-r" => {
         let l: Vec<&str> = args[counter + 1].split(",").collect();
@@ -117,7 +117,7 @@ fn main() -> std::io::Result<()> {
           d.options.get("MESSAGETYPE").unwrap(),
           d.format_mac(),
         );
-        println!("{:02x?}", d);
+        // println!("{:02x?}", d);
         let x = d.construct_response(&c);
         let u = UdpSocket::bind(c.bind_address)?;
         let source = Ipv4Addr::from(d.ciaddr);
