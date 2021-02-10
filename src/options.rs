@@ -341,10 +341,20 @@ impl DhcpMessage {
       DhcpOption::MessageType(DhcpMessageType::DHCPDISCOVER) => {
         // DHCPOFFER
         offer_value = 2;
+        let y: u32 = u32::from_be_bytes(response[16..20].try_into().unwrap());
+        println!(
+          "responding to DHCPDISCOVER with DHCPOFFER of {}",
+          Ipv4Addr::from(y)
+        );
       }
       DhcpOption::MessageType(DhcpMessageType::DHCPREQUEST) => {
         // DHCPACK
         offer_value = 5;
+        let y: u32 = u32::from_be_bytes(response[16..20].try_into().unwrap());
+        println!(
+          "responding to DHCPREQUEST with DHCPOFFER of {}",
+          Ipv4Addr::from(y)
+        );
       }
       _ => {}
     }
@@ -397,11 +407,10 @@ impl DhcpMessage {
                 // just ACK the client their requested address
                 yiaddr = x.octets();
               }
-              _ => {
-                yiaddr = [192, 168, 122, 23];
-              }
+              _ => {}
             },
             None => {
+              // client doesn't have one yet, let's generate one and give it to em
               yiaddr = [192, 168, 122, 22];
             }
           },
@@ -411,15 +420,12 @@ impl DhcpMessage {
                 // just ACK the client their requested address
                 yiaddr = x.octets();
               }
-              _ => {
-                yiaddr = [192, 168, 122, 15];
-              }
+              _ => {}
             },
             None => {
               if !Ipv4Addr::new(ciaddr[0], ciaddr[1], ciaddr[2], ciaddr[3]).is_unspecified() {
                 yiaddr = ciaddr;
               }
-              println!("no requested ip, but ciaddr: {:?}", ciaddr);
             }
           },
           DhcpMessageType::DHCPACK => {}
