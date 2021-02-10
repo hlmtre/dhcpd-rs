@@ -17,7 +17,7 @@ pub(crate) struct Config {
   pub debug: bool,
   pub listening_address: SocketAddr,
   pub bind_address: SocketAddr,
-  pub router: Vec<Ipv4Addr>,
+  pub routers: Vec<Ipv4Addr>,
   pub subnet: Ipv4Addr,
   pub dhcp_range: Vec<Ipv4Addr>,
   pub dns_servers: Vec<Ipv4Addr>,
@@ -31,7 +31,7 @@ impl Default for Config {
       debug: true,
       listening_address: "0.0.0.0:67".parse::<SocketAddr>().unwrap(),
       bind_address: "0.0.0.0:68".parse::<SocketAddr>().unwrap(),
-      router: Vec::new(),
+      routers: Vec::new(),
       subnet: "255.255.255.0".parse::<Ipv4Addr>().unwrap(),
       dhcp_range: Vec::new(),
       dns_servers: Vec::new(),
@@ -42,7 +42,7 @@ impl Default for Config {
 }
 
 impl Config {
-  fn lease_to_seconds(&self) -> u32 {
+  pub(crate) fn lease_to_seconds(&self) -> u32 {
     if self.lease_time.ends_with("h") {
       let mut hours = String::new();
       for c in self.lease_time.chars() {

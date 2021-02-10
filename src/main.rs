@@ -49,6 +49,20 @@ fn main() -> std::io::Result<()> {
           }
         }
       }
+      "--routers" => {
+        let l: Vec<&str> = args[counter + 1].split(",").collect();
+        for x in l {
+          if x.len() > 0 {
+            c.routers.push(match x.parse::<Ipv4Addr>() {
+              Ok(a) => a,
+              _ => {
+                error("router parse error!");
+                break;
+              }
+            });
+          }
+        }
+      }
       "--dns" => {
         let l: Vec<&str> = args[counter + 1].split(",").collect();
         for x in l {
@@ -104,15 +118,15 @@ fn main() -> std::io::Result<()> {
           d.format_mac(),
           d.options.get("PARAMETER_REQUEST_LIST")
         );
-        let x = d.construct_response();
+        let x = d.construct_response(&c);
         let u = UdpSocket::bind(c.bind_address)?;
         let source = Ipv4Addr::from(d.ciaddr);
         // if the client specifies an IP (renewing), unicast to that
         // otherwise we have to broadcast (DHCPDISCOVER, DHCPREQUEST)
-        let target = if source != Ipv4Addr::new(0, 0, 0, 0) {
+        let target = if source.is_unspecified() {
           source
         } else {
-          Ipv4Addr::new(255, 255, 255, 255)
+          Ipv4Addr::BROADCAST
         };
         let target_socket = SocketAddrV4::new(target, 68);
         let _ = u.set_broadcast(true);
@@ -146,6 +160,8 @@ fn help() {
     -h, --help : this help message
     --address : <address> (address to bind to).
     --debug : debug (don't background, prints debugging output).
+    --subnet : subnet mask to give to clients (255.255.255.0, for example).
+    --routers : routers to give to clients (in order of preference; <192.168.122.1,192.168.6.1>, for example). NO SPACES.
     --range : range to assign to clients (<192.168.5.50,192.168.5.150>, for example). NO SPACES.
     --dns : dns servers to advertise (<192.168.5.4,192.168.5.5>, for example). NO SPACES.
     --domain : domain to advertise (for clients to append to otherwise-unqualified dns queries).

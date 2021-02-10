@@ -1,5 +1,7 @@
-use std::fmt;
 use std::{collections::HashMap, convert::TryInto, net::Ipv4Addr};
+use std::{fmt, net::IpAddr};
+
+use crate::config::Config;
 
 // for reference: the magic cookie marks the start of DHCP options.
 // otherwise you'd never know where the options start after the fixed length of the base bootp message
@@ -304,7 +306,7 @@ impl DhcpMessage {
     Ok(ret)
   }
 
-  pub(crate) fn construct_response(&self) -> Vec<u8> {
+  pub(crate) fn construct_response(&self, c: &Config) -> Vec<u8> {
     // a DISCOVER! a-WOOOGAH! a-WOOOGAH!
     // build our first response, and offer the client an IP
     // this is followed by the client going 'sounds good, gimme' (DHCPREQUEST)
@@ -321,16 +323,26 @@ impl DhcpMessage {
       let offer_value: u8 = 2;
       let dhcp_server_id: u8 = 54;
       let dhcp_server_id_len: u8 = 4;
-      let dhcp_server_id_value: [u8; 4] = Ipv4Addr::new(192, 168, 122, 1).octets();
+      let a = c.bind_address.ip();
+      let dhcp_server_id_value: [u8; 4] = match a {
+        IpAddr::V4(ip4) => ip4.octets(),
+        IpAddr::V6(_) => Ipv4Addr::UNSPECIFIED.octets(),
+      };
       let lease_time_option: u8 = 51;
       let lease_time_len: u8 = 4;
-      let mut lease_time: u32 = 28800;
+      let lease_time: u32 = c.lease_to_seconds();
       let subnet_mask_option: u8 = 0x01;
       let subnet_mask_len: u8 = 4;
-      let subnet_mask: [u8; 4] = Ipv4Addr::new(255, 255, 255, 0).octets();
+      let subnet_mask: [u8; 4] = c.subnet.octets();
       let router_option: u8 = 3;
       let router_option_len: u8 = 4;
-      let router_option_value: [u8; 4] = Ipv4Addr::new(192, 168, 122, 1).octets();
+      eprintln!("{:#?}", c);
+      let router_option_value: [u8; 4] = c
+        .routers
+        .clone()
+        .pop()
+        .unwrap_or_else(|| Ipv4Addr::UNSPECIFIED)
+        .octets();
       let option_end: u8 = 255;
       // whew, we're done with bootp. on to dhcp!
       response.append(&mut magic_cookie.to_vec());
