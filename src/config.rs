@@ -43,19 +43,32 @@ impl Default for Config {
 
 impl Config {
   pub(crate) fn lease_to_seconds(&self) -> u32 {
-    if self.lease_time.ends_with("h") {
-      let mut hours = String::new();
-      for c in self.lease_time.chars() {
-        if !c.is_digit(10) {
-          hours.push(c);
-        }
+    let mut units = String::new();
+    for c in self.lease_time.chars() {
+      if c.is_digit(10) {
+        units.push(c);
       }
-      let hours_as_int = match hours.parse::<u32>() {
-        Ok(h) => h,
-        Err(_) => 12,
-      };
-      return 60 * hours_as_int;
     }
-    return 28800;
+    let units_as_int = match units.parse::<u32>() {
+      Ok(h) => h,
+      Err(_) => 12,
+    };
+    match self.lease_time.clone().pop() {
+      Some(c) => match c {
+        'h' => {
+          return 60 * 60 * units_as_int;
+        }
+        'm' => {
+          return 60 * units_as_int;
+        }
+        _ => {
+          return units_as_int;
+        }
+      },
+      None => {
+        // let's just default to 12h (in seconds, durr)
+        return 28800;
+      }
+    }
   }
 }

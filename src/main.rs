@@ -49,7 +49,7 @@ fn main() -> std::io::Result<()> {
           }
         }
       }
-      "--routers" => {
+      "--routers" | "--router" => {
         let l: Vec<&str> = args[counter + 1].split(",").collect();
         for x in l {
           if x.len() > 0 {
@@ -113,10 +113,9 @@ fn main() -> std::io::Result<()> {
         let filled_buf: &mut [u8] = &mut buf[..l];
         d.parse(filled_buf);
         println!(
-          "==> {:?} from {}; prl: {:02x?}",
+          "==> {:?} from {}",
           d.options.get("MESSAGETYPE").unwrap(),
           d.format_mac(),
-          d.options.get("PARAMETER_REQUEST_LIST")
         );
         let x = d.construct_response(&c);
         let u = UdpSocket::bind(c.bind_address)?;
