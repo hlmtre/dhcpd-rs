@@ -1,7 +1,9 @@
+mod byte_serialize;
 use std::{collections::HashMap, convert::TryInto, net::Ipv4Addr};
 use std::{fmt, net::IpAddr};
 
 use crate::{config::Config, pool::Pool};
+use byte_serialize::BEByteSerializable;
 
 // for reference: the magic cookie marks the start of DHCP options.
 // otherwise you'd never know where the options start after the fixed length of the base bootp message
@@ -449,9 +451,9 @@ impl DhcpMessage {
     response.push(htype);
     response.push(hlen);
     response.push(hops);
-    Self::push_byte_vec_from_u32(&self, &mut response, xid);
-    Self::push_byte_vec_from_u16(&self, &mut response, secs);
-    Self::push_byte_vec_from_u16(&self, &mut response, flags);
+    BEByteSerializable::to_be_bytes(&xid, &mut response);
+    BEByteSerializable::to_be_bytes(&secs, &mut response);
+    BEByteSerializable::to_be_bytes(&flags, &mut response);
     response.append(&mut ciaddr.to_vec());
     response.append(&mut yiaddr.to_vec());
     response.append(&mut siaddr.to_vec());
@@ -482,18 +484,6 @@ impl DhcpMessage {
       }
     }
     response
-  }
-
-  fn push_byte_vec_from_u32(&self, vec: &mut Vec<u8>, obj: u32) {
-    for b in &obj.to_be_bytes() {
-      vec.push(*b);
-    }
-  }
-
-  fn push_byte_vec_from_u16(&self, vec: &mut Vec<u8>, obj: u16) {
-    for b in &obj.to_be_bytes() {
-      vec.push(*b);
-    }
   }
 
   fn get_ipv4_array(
