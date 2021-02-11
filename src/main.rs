@@ -1,5 +1,6 @@
 mod config;
 mod options;
+mod pool;
 
 use crate::{config::Config, options::DhcpMessage};
 use std::{
@@ -85,6 +86,11 @@ fn main() -> std::io::Result<()> {
     eprintln!("==> {:?}", c);
   }
 
+  let mut p = pool::Pool::new(
+    c.dhcp_range.first().unwrap().to_owned(),
+    c.dhcp_range.last().unwrap().to_owned(),
+  );
+
   let socket = UdpSocket::bind(c.listening_address)?;
   socket.set_nonblocking(true).unwrap();
   let _ = socket.set_broadcast(true);
@@ -133,6 +139,8 @@ fn main() -> std::io::Result<()> {
         let _ = u
           .send_to(&x, target_socket)
           .expect("couldn't send to broadcast :(");
+        let a = p.allocate_address(d.chaddr, c.lease_time);
+        println!("{:#?}", a);
       }
       Err(_) => {}
     }

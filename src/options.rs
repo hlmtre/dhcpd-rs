@@ -70,7 +70,7 @@ pub(crate) struct DhcpMessage {
   yiaddr: u32,
   siaddr: u32,
   giaddr: u32,
-  chaddr: Vec<u8>,
+  pub chaddr: Vec<u8>,
   sname: usize,
   file: usize,
   pub options: HashMap<String, DhcpOption>,
@@ -288,11 +288,6 @@ impl DhcpMessage {
     }
   }
 
-  // look but don't mess with current index
-  fn peek_next(&self, buf: &[u8], current_index: usize) -> u8 {
-    buf[current_index]
-  }
-
   /// take a reference to the dhcp message buffer, read everything to jump length,
   /// and increment our current index by jump length.
   /// returns the byte array read as a vector.
@@ -398,6 +393,8 @@ impl DhcpMessage {
     let flags: u16 = 0b0000_0001_0000_0000;
     let ciaddr: [u8; 4] = self.ciaddr.to_be_bytes();
     let mut yiaddr: [u8; 4] = [192, 168, 122, 60];
+    // TODO some stuff in here so we understand the 'conversation' part of the dhcp conversation
+    // remember the xid
     match self.options.get("MESSAGETYPE") {
       Some(i) => match i {
         DhcpOption::MessageType(x) => match x {
