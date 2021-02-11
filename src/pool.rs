@@ -10,10 +10,10 @@ pub struct Pool {
 
 #[derive(Debug, Clone)]
 pub struct Lease {
-  ip: Ipv4Addr,
-  hwaddr: Vec<u8>,
-  lease_timestamp: SystemTime,
-  lease_len: u32,
+  pub ip: Ipv4Addr,
+  pub hwaddr: Vec<u8>,
+  pub lease_timestamp: SystemTime,
+  pub lease_len: u32,
 }
 
 #[derive(Debug, Clone)]

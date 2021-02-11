@@ -124,7 +124,7 @@ fn main() -> std::io::Result<()> {
           d.format_mac(),
         );
         // println!("{:02x?}", d);
-        let x = d.construct_response(&c);
+        let x = d.construct_response(&c, &mut p);
         let u = UdpSocket::bind(c.bind_address)?;
         let source = Ipv4Addr::from(d.ciaddr);
         // if the client specifies an IP (renewing), unicast to that
@@ -140,7 +140,6 @@ fn main() -> std::io::Result<()> {
           .send_to(&x, target_socket)
           .expect("couldn't send to broadcast :(");
         let a = p.allocate_address(d.chaddr, c.lease_time);
-        println!("{:#?}", a);
       }
       Err(_) => {}
     }

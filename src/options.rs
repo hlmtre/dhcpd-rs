@@ -1,7 +1,7 @@
 use std::{collections::HashMap, convert::TryInto, net::Ipv4Addr};
 use std::{fmt, net::IpAddr};
 
-use crate::config::Config;
+use crate::{config::Config, pool::Pool};
 
 // for reference: the magic cookie marks the start of DHCP options.
 // otherwise you'd never know where the options start after the fixed length of the base bootp message
@@ -302,12 +302,12 @@ impl DhcpMessage {
     Ok(ret)
   }
 
-  pub(crate) fn construct_response(&self, c: &Config) -> Vec<u8> {
+  pub(crate) fn construct_response(&self, c: &Config, p: &mut Pool) -> Vec<u8> {
     // build our first response, and offer the client an IP
     // this is followed by the client going 'sounds good, gimme' (DHCPREQUEST)
     // and finally our DHCPACK
     let magic_cookie = MAGIC_COOKIE;
-    let mut response = self.build_bootp_packet();
+    let mut response = self.build_bootp_packet(p, c);
     let offer: u8 = 53;
     let offer_len: u8 = 1;
     let mut offer_value: u8 = 2;
@@ -337,19 +337,11 @@ impl DhcpMessage {
         // DHCPOFFER
         offer_value = 2;
         let y: u32 = u32::from_be_bytes(response[16..20].try_into().unwrap());
-        println!(
-          "responding to DHCPDISCOVER with DHCPOFFER of {}",
-          Ipv4Addr::from(y)
-        );
       }
       DhcpOption::MessageType(DhcpMessageType::DHCPREQUEST) => {
         // DHCPACK
         offer_value = 5;
         let y: u32 = u32::from_be_bytes(response[16..20].try_into().unwrap());
-        println!(
-          "responding to DHCPREQUEST with DHCPOFFER of {}",
-          Ipv4Addr::from(y)
-        );
       }
       _ => {}
     }
@@ -382,7 +374,7 @@ impl DhcpMessage {
     return response;
   }
 
-  fn build_bootp_packet(&self) -> Vec<u8> {
+  fn build_bootp_packet(&self, p: &mut Pool, c: &Config) -> Vec<u8> {
     let mut response: Vec<u8> = Vec::new();
     let op: u8 = 0x02; // response
     let htype: u8 = self.htype; // ethernet
@@ -393,6 +385,7 @@ impl DhcpMessage {
     let flags: u16 = 0b0000_0001_0000_0000;
     let ciaddr: [u8; 4] = self.ciaddr.to_be_bytes();
     let mut yiaddr: [u8; 4] = [192, 168, 122, 60];
+    let mut chaddr = self.chaddr.clone();
     // TODO some stuff in here so we understand the 'conversation' part of the dhcp conversation
     // remember the xid
     match self.options.get("MESSAGETYPE") {
@@ -408,7 +401,11 @@ impl DhcpMessage {
             },
             None => {
               // client doesn't have one yet, let's generate one and give it to em
-              yiaddr = [192, 168, 122, 22];
+              yiaddr = p
+                .allocate_address(chaddr.clone(), c.lease_time)
+                .unwrap()
+                .ip
+                .octets();
             }
           },
           DhcpMessageType::DHCPREQUEST => match self.options.get("REQUESTED_IP") {
@@ -421,7 +418,14 @@ impl DhcpMessage {
             },
             None => {
               if !Ipv4Addr::new(ciaddr[0], ciaddr[1], ciaddr[2], ciaddr[3]).is_unspecified() {
+                // client is requesting an IP, let's just say okee dokey
                 yiaddr = ciaddr;
+              } else {
+                yiaddr = p
+                  .allocate_address(chaddr.clone(), c.lease_time)
+                  .unwrap()
+                  .ip
+                  .octets();
               }
             }
           },
@@ -439,7 +443,6 @@ impl DhcpMessage {
     }
     let siaddr: [u8; 4] = self.siaddr.to_be_bytes();
     let giaddr: [u8; 4] = Ipv4Addr::new(0, 0, 0, 0).octets();
-    let mut chaddr = self.chaddr.clone();
     let sname: &str = "dhcpd-rs.lan.zero9f9.com";
     let file: [u8; 128] = [0; 128];
     response.push(op);
