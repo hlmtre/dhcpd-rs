@@ -329,6 +329,7 @@ impl DhcpMessage {
     let router_option: u8 = 3;
     let router_option_len: u8 = 4;
     let mut b = c.routers.clone();
+    // so we can pop and get the first one specified
     b.reverse();
     let router_option_value: [u8; 4] = b.pop().unwrap_or_else(|| Ipv4Addr::UNSPECIFIED).octets();
     let option_end: u8 = 255;
@@ -403,11 +404,13 @@ impl DhcpMessage {
             },
             None => {
               // client doesn't have one yet, let's generate one and give it to em
-              yiaddr = p
-                .allocate_address(chaddr.clone(), c.lease_time)
-                .unwrap()
-                .ip
-                .octets();
+              yiaddr = match p.allocate_address(chaddr.clone(), c.lease_time) {
+                Ok(l) => l.ip.octets(),
+                Err(_) => {
+                  let a = [0 as u8; 4];
+                  a
+                }
+              }
             }
           },
           DhcpMessageType::DHCPREQUEST => match self.options.get("REQUESTED_IP") {
