@@ -1,9 +1,9 @@
-use std::{net::Ipv4Addr, time::SystemTime};
+use std::{net::Ipv4Addr, time::Duration, time::SystemTime};
 
 #[derive(Debug, Clone)]
 pub struct Pool {
   range: Vec<Ipv4Addr>,
-  leases: Vec<Lease>,
+  pub(crate) leases: Vec<Lease>,
   exclusions: Vec<Ipv4Addr>,
   reservations: Vec<Lease>,
 }
@@ -16,11 +16,35 @@ pub struct Lease {
   pub lease_len: u32,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum LeaseStatus {
+  Fresh,
+  Expired,
+  Decaying,
+}
+
 #[derive(Debug, Clone)]
 pub enum PoolError {
   PoolExhausted,
   RequestedAddressOutOfRange,
   RequestedAddressAlreadyAssigned,
+}
+
+impl Lease {
+  pub fn lease_status(&self) -> LeaseStatus {
+    if self.lease_timestamp.elapsed().unwrap() > Duration::from_secs(self.lease_len.into()) {
+      return LeaseStatus::Expired;
+    } else if self.lease_timestamp.elapsed().unwrap()
+      < Duration::from_secs((self.lease_len / 2).into())
+    {
+      return LeaseStatus::Fresh;
+    } else {
+      return LeaseStatus::Decaying;
+    }
+  }
+  pub fn update_lease(&mut self, lt: SystemTime) {
+    self.lease_timestamp = lt;
+  }
 }
 
 impl Pool {
@@ -53,6 +77,34 @@ impl Pool {
     };
     self.leases.push(l.clone());
     Ok(l)
+  }
+
+  pub(crate) fn delete_lease(&mut self, a: Ipv4Addr) -> Result<(), PoolError> {
+    let mut i: usize = 0;
+    let mut in_leases: bool = false;
+    for l in self.leases.iter() {
+      if l.ip == a {
+        in_leases = true;
+        break;
+      }
+      i += 1;
+    }
+    self.leases.remove(i);
+    if in_leases {
+      ()
+    }
+    Err(PoolError::RequestedAddressOutOfRange)
+  }
+
+  pub(crate) fn valid_lease(&self, a: Ipv4Addr) -> bool {
+    for l in self.leases.iter() {
+      if l.ip == a {
+        if l.lease_status() != LeaseStatus::Expired {
+          return true;
+        }
+      }
+    }
+    false
   }
 
   fn enumerate_range(s: Ipv4Addr, e: Ipv4Addr) -> Vec<Ipv4Addr> {

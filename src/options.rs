@@ -1,8 +1,10 @@
 mod byte_serialize;
-use std::{collections::HashMap, convert::TryInto, net::Ipv4Addr};
+use std::{
+  collections::HashMap, convert::TryInto, fmt::Formatter, net::Ipv4Addr, time::SystemTime,
+};
 use std::{fmt, net::IpAddr};
 
-use crate::{config::Config, pool::Pool};
+use crate::{config::Config, pool::LeaseStatus, pool::Pool};
 use byte_serialize::BEByteSerializable;
 
 // for reference: the magic cookie marks the start of DHCP options.
@@ -134,33 +136,28 @@ impl DhcpMessageType {
   }
 }
 
+pub(crate) fn format_mac(mac: &Vec<u8>) -> String {
+  format!(
+    "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+    mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
+  )
+}
+
 impl fmt::Display for DhcpMessage {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+  fn fmt(&self, f: &mut Formatter) -> fmt::Result {
     let s: &str = if self.op == 1 { "request" } else { "reply" };
     write!(
       f,
-      "
-       message type: {}
-       mac address:  {}",
+      "op: {}, xid: {:02x?}, ciaddr: {:02x?}, chaddr: {:02x?}",
       s,
-      self.format_mac()
+      self.xid,
+      self.ciaddr,
+      format_mac(&self.chaddr)
     )
   }
 }
 
 impl DhcpMessage {
-  pub(crate) fn format_mac(&self) -> String {
-    format!(
-      "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-      self.chaddr[0],
-      self.chaddr[1],
-      self.chaddr[2],
-      self.chaddr[3],
-      self.chaddr[4],
-      self.chaddr[5]
-    )
-  }
-
   pub(crate) fn parse(&mut self, buf: &[u8]) {
     // first do the known-size parts
     self.op = buf[0];
@@ -387,53 +384,67 @@ impl DhcpMessage {
     let secs: u16 = 0;
     let flags: u16 = 0b0000_0001_0000_0000;
     let ciaddr: [u8; 4] = self.ciaddr.to_be_bytes();
-    let mut yiaddr: [u8; 4] = [192, 168, 122, 60];
+    let mut yiaddr: [u8; 4] = [0, 0, 0, 0];
     let mut chaddr = self.chaddr.clone();
     // TODO some stuff in here so we understand the 'conversation' part of the dhcp conversation
     // remember the xid
     match self.options.get("MESSAGETYPE") {
       Some(i) => match i {
         DhcpOption::MessageType(x) => match x {
-          DhcpMessageType::DHCPDISCOVER => match self.options.get("REQUESTED_IP") {
-            Some(i) => match i {
-              DhcpOption::RequestedIpAddress(x) => {
-                // just ACK the client their requested address
-                yiaddr = x.octets();
-              }
-              _ => {}
-            },
-            None => {
-              // client doesn't have one yet, let's generate one and give it to em
-              yiaddr = match p.allocate_address(chaddr.clone(), c.lease_time) {
-                Ok(l) => l.ip.octets(),
-                Err(_) => {
-                  let a = [0 as u8; 4];
-                  a
+          DhcpMessageType::DHCPDISCOVER | DhcpMessageType::DHCPREQUEST => {
+            match self.options.get("REQUESTED_IP") {
+              Some(i) => match i {
+                DhcpOption::RequestedIpAddress(x) => {
+                  // just ACK the client their requested address
+                  if p.valid_lease(*x) {
+                    yiaddr = x.octets();
+                  }
+                }
+                _ => {}
+              },
+              None => {
+                // client isn't requesting one specifically here, let's generate one and give it to em
+                let mut found: bool = false;
+                for l in p.leases.iter_mut() {
+                  if l.hwaddr == chaddr {
+                    // a lease already exists
+                    match l.lease_status() {
+                      LeaseStatus::Fresh => {
+                        yiaddr = l.ip.octets();
+                        found = true;
+                        break;
+                      }
+                      LeaseStatus::Decaying => {
+                        l.update_lease(SystemTime::now()); // update the lease
+                        yiaddr = l.ip.octets();
+                        found = true;
+                        break;
+                      }
+                      LeaseStatus::Expired => {
+                        break;
+                      }
+                    }
+                  }
+                }
+                if found {
+                  println!(
+                    "found existing lease for {}; re-issuing lease to {:02x?}",
+                    Ipv4Addr::from(yiaddr),
+                    chaddr
+                  );
+                }
+                if !found {
+                  yiaddr = match p.allocate_address(chaddr.clone(), c.lease_time) {
+                    Ok(l) => l.ip.octets(),
+                    Err(_) => {
+                      let a = [0 as u8; 4];
+                      a
+                    }
+                  }
                 }
               }
             }
-          },
-          DhcpMessageType::DHCPREQUEST => match self.options.get("REQUESTED_IP") {
-            Some(i) => match i {
-              DhcpOption::RequestedIpAddress(x) => {
-                // just ACK the client their requested address
-                yiaddr = x.octets();
-              }
-              _ => {}
-            },
-            None => {
-              if !Ipv4Addr::new(ciaddr[0], ciaddr[1], ciaddr[2], ciaddr[3]).is_unspecified() {
-                // client is requesting an IP, let's just say okee dokey
-                yiaddr = ciaddr;
-              } else {
-                yiaddr = p
-                  .allocate_address(chaddr.clone(), c.lease_time)
-                  .unwrap()
-                  .ip
-                  .octets();
-              }
-            }
-          },
+          }
           DhcpMessageType::DHCPACK => {}
           DhcpMessageType::DHCPNAK => {}
           DhcpMessageType::DHCPRELEASE => {
