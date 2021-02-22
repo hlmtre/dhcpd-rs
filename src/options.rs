@@ -148,11 +148,12 @@ impl fmt::Display for DhcpMessage {
     let s: &str = if self.op == 1 { "request" } else { "reply" };
     write!(
       f,
-      "op: {}, xid: {:02x?}, ciaddr: {:02x?}, chaddr: {:02x?}",
+      "op: {}, xid: {:02x?}, ciaddr: {:02x?}, chaddr: {:02x?}, options: {:02x?}",
       s,
       self.xid,
       self.ciaddr,
-      format_mac(&self.chaddr)
+      format_mac(&self.chaddr),
+      self.options
     )
   }
 }
@@ -212,6 +213,23 @@ impl DhcpMessage {
                 self
                   .options
                   .insert("ROUTERS".to_string(), DhcpOption::Router(a));
+              }
+              Err(e) => {
+                eprintln!("{:#?}", e);
+                continue;
+              }
+            }
+          }
+          // dec54: server identifier
+          0x36 => {
+            let len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
+            let b = Self::take_next(&self, buf, &mut current_index, len.into()).unwrap();
+            match Self::get_ipv4_array(&self, len.into(), b) {
+              Ok(a) => {
+                self.options.insert(
+                  "SERVER_IDENTIFIER".to_string(),
+                  DhcpOption::ServerIdentifier(a[0]),
+                );
               }
               Err(e) => {
                 eprintln!("{:#?}", e);
@@ -330,18 +348,19 @@ impl DhcpMessage {
     b.reverse();
     let router_option_value: [u8; 4] = b.pop().unwrap_or_else(|| Ipv4Addr::UNSPECIFIED).octets();
     let option_end: u8 = 255;
+    let mut y: Ipv4Addr = Ipv4Addr::UNSPECIFIED;
 
     match *self.options.get("MESSAGETYPE").unwrap() {
       // a DISCOVER! a-WOOOGAH! a-WOOOGAH!
       DhcpOption::MessageType(DhcpMessageType::DHCPDISCOVER) => {
         // DHCPOFFER
         offer_value = 2;
-        let y: u32 = u32::from_be_bytes(response[16..20].try_into().unwrap());
+        y = Ipv4Addr::from(u32::from_be_bytes(response[16..20].try_into().unwrap()));
       }
       DhcpOption::MessageType(DhcpMessageType::DHCPREQUEST) => {
         // DHCPACK
         offer_value = 5;
-        let y: u32 = u32::from_be_bytes(response[16..20].try_into().unwrap());
+        y = Ipv4Addr::from(u32::from_be_bytes(response[16..20].try_into().unwrap()));
       }
       _ => {}
     }
@@ -363,6 +382,8 @@ impl DhcpMessage {
     response.push(router_option_len);
     response.append(&mut router_option_value.to_vec());
     response.push(option_end);
+    y = Ipv4Addr::from(u32::from_be_bytes(response[16..20].try_into().unwrap()));
+    println!("{}, {}", y, self);
     if response.len() < 276 {
       loop {
         response.push(0);
@@ -428,9 +449,9 @@ impl DhcpMessage {
                 }
                 if found {
                   println!(
-                    "found existing lease for {}; re-issuing lease to {:02x?}",
+                    "found existing lease for {}; re-issuing lease to {}",
                     Ipv4Addr::from(yiaddr),
-                    chaddr
+                    format_mac(&chaddr)
                   );
                 }
                 if !found {
@@ -440,7 +461,12 @@ impl DhcpMessage {
                       let a = [0 as u8; 4];
                       a
                     }
-                  }
+                  };
+                  println!(
+                    "new address requested for {}; issuing new lease to {}",
+                    Ipv4Addr::from(yiaddr),
+                    format_mac(&chaddr)
+                  );
                 }
               }
             }
@@ -525,6 +551,12 @@ impl DhcpMessage {
     }
     Ok(ovec)
   }
+
+  /*
+  pub(crate) fn get_dest_ip(&self) -> Ipv4Addr {
+    return Ipv4Addr::from(self.)
+  }
+  */
 
   pub(crate) fn get_options_index(&self, ba: &[u8]) -> usize {
     let mmc = MAGIC_COOKIE;

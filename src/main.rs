@@ -2,10 +2,13 @@ mod config;
 mod options;
 mod pool;
 
-use crate::{config::Config, options::DhcpMessage};
+use crate::{
+  config::Config,
+  options::{DhcpMessage, DhcpOption},
+};
 use std::{
   env,
-  net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket},
+  net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket},
 };
 
 fn main() -> std::io::Result<()> {
@@ -118,8 +121,28 @@ fn main() -> std::io::Result<()> {
         let mut d: DhcpMessage = DhcpMessage::default();
         let filled_buf: &mut [u8] = &mut buf[..l];
         d.parse(filled_buf);
-        println!("==> {:?} from {}", d.options.get("MESSAGETYPE").unwrap(), d);
-        // println!("{:02x?}", d);
+        println!(
+          "{:?} {:?} from {}",
+          std::time::SystemTime::now(),
+          d.options.get("MESSAGETYPE").unwrap(),
+          d
+        );
+        // if the dest address is us or broadcast
+        let _f = d.options.get("SERVER_IDENTIFIER");
+        match _f {
+          Some(__f) => match __f {
+            DhcpOption::ServerIdentifier(a) => {
+              if IpAddr::V4(a.clone()) != c.listening_address.ip() || !a.is_broadcast() {
+                println!("to {}; not for us", a.clone());
+                continue;
+              } else {
+                println!("target is us! awooooo-gah! awooo-gah!");
+              }
+            }
+            _ => {}
+          },
+          None => {}
+        }
         let x = d.construct_response(&c, &mut p);
         let u = UdpSocket::bind(c.bind_address)?;
         let source = Ipv4Addr::from(d.ciaddr);
