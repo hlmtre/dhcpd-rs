@@ -130,10 +130,10 @@ fn main() -> std::io::Result<()> {
         // if the dest address is us or broadcast
         let _f = d.options.get("SERVER_IDENTIFIER");
         match _f {
-          Some(__f) => match __f {
+          Some(_g) => match _g {
             DhcpOption::ServerIdentifier(a) => {
-              if IpAddr::V4(a.clone()) != c.listening_address.ip() || !a.is_broadcast() {
-                println!("to {}; not for us", a.clone());
+              if IpAddr::V4(a.clone()) != c.bind_address.ip() && !a.is_broadcast() {
+                println!("to {}; not for us ({})", a.clone(), c.bind_address.ip());
                 continue;
               } else {
                 println!("target is us! awooooo-gah! awooo-gah!");
