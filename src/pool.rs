@@ -23,11 +23,21 @@ pub enum LeaseStatus {
   Decaying,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum PoolError {
   PoolExhausted,
   RequestedAddressOutOfRange,
   RequestedAddressAlreadyAssigned,
+}
+
+impl PartialEq for Lease {
+  fn eq(&self, other: &Self) -> bool {
+    if self.ip == other.ip {
+      return true;
+    }
+    return false;
+  }
 }
 
 impl Lease {
@@ -42,6 +52,7 @@ impl Lease {
       return LeaseStatus::Decaying;
     }
   }
+
   pub fn update_lease(&mut self, lt: SystemTime) {
     self.lease_timestamp = lt;
   }
@@ -62,12 +73,10 @@ impl Pool {
     hwaddr: Vec<u8>,
     lease_len: u32,
   ) -> Result<Lease, PoolError> {
-    let ip: Ipv4Addr = match self.range.pop() {
-      Some(i) => i,
-      None => {
-        return Err(PoolError::PoolExhausted);
-      }
-    };
+    if self.range.len() < 1 {
+      return Err(PoolError::PoolExhausted);
+    }
+    let ip: Ipv4Addr = self.range[self.range.len() - 1];
     let lease_timestamp = SystemTime::now();
     let l: Lease = Lease {
       ip,
@@ -77,6 +86,13 @@ impl Pool {
     };
     self.leases.push(l.clone());
     Ok(l)
+  }
+
+  pub(crate) fn available(&self, i: Ipv4Addr) -> bool {
+    if self.range.contains(&i) {
+      return true;
+    }
+    false
   }
 
   pub(crate) fn delete_lease(&mut self, a: Ipv4Addr) -> Result<(), PoolError> {

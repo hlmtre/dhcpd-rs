@@ -1,7 +1,4 @@
-use std::{
-  net::{Ipv4Addr, SocketAddr},
-  time::Duration,
-};
+use std::net::{Ipv4Addr, SocketAddr};
 
 #[derive(Debug)]
 pub(crate) struct Config {

@@ -8,7 +8,7 @@ use crate::{
 };
 use std::{
   env,
-  net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket},
+  net::{IpAddr, Ipv4Addr, SocketAddrV4, UdpSocket},
 };
 
 fn main() -> std::io::Result<()> {
@@ -158,7 +158,7 @@ fn main() -> std::io::Result<()> {
         let _ = u
           .send_to(&x, target_socket)
           .expect("couldn't send to broadcast :(");
-        let a = p.allocate_address(d.chaddr, c.lease_time);
+        //let a = p.allocate_address(d.chaddr, c.lease_time);
       }
       Err(_) => {}
     }

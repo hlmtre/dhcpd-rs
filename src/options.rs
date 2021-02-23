@@ -120,18 +120,34 @@ pub(crate) enum DhcpMessageType {
   DHCPINFORM = 8,
 }
 
-impl DhcpMessageType {
-  pub(crate) fn from_u8(value: u8) -> DhcpMessageType {
-    match value {
-      1 => DhcpMessageType::DHCPDISCOVER,
-      2 => DhcpMessageType::DHCPOFFER,
-      3 => DhcpMessageType::DHCPREQUEST,
-      4 => DhcpMessageType::DHCPDECLINE,
-      5 => DhcpMessageType::DHCPACK,
-      6 => DhcpMessageType::DHCPNAK,
-      7 => DhcpMessageType::DHCPRELEASE,
-      8 => DhcpMessageType::DHCPINFORM,
-      _ => DhcpMessageType::UNKNOWN,
+impl From<DhcpMessageType> for u8 {
+  fn from(orig: DhcpMessageType) -> Self {
+    match orig {
+      DhcpMessageType::UNKNOWN => return 0,
+      DhcpMessageType::DHCPDISCOVER => return 1,
+      DhcpMessageType::DHCPOFFER => return 2,
+      DhcpMessageType::DHCPREQUEST => return 3,
+      DhcpMessageType::DHCPDECLINE => return 4,
+      DhcpMessageType::DHCPACK => return 5,
+      DhcpMessageType::DHCPNAK => return 6,
+      DhcpMessageType::DHCPRELEASE => return 7,
+      DhcpMessageType::DHCPINFORM => return 8,
+    }
+  }
+}
+
+impl From<u8> for DhcpMessageType {
+  fn from(orig: u8) -> Self {
+    match orig {
+      1 => return DhcpMessageType::DHCPDISCOVER,
+      2 => return DhcpMessageType::DHCPOFFER,
+      3 => return DhcpMessageType::DHCPREQUEST,
+      4 => return DhcpMessageType::DHCPDECLINE,
+      5 => return DhcpMessageType::DHCPACK,
+      6 => return DhcpMessageType::DHCPNAK,
+      7 => return DhcpMessageType::DHCPRELEASE,
+      8 => return DhcpMessageType::DHCPINFORM,
+      0 | _ => return DhcpMessageType::UNKNOWN,
     }
   }
 }
@@ -246,7 +262,7 @@ impl DhcpMessage {
                 .unwrap()[0];
             self.options.insert(
               "MESSAGETYPE".to_string(),
-              DhcpOption::MessageType(DhcpMessageType::from_u8(dhcp_message_type)),
+              DhcpOption::MessageType(dhcp_message_type.into()),
             );
           }
           // dec55: parameter request list
@@ -354,13 +370,19 @@ impl DhcpMessage {
       // a DISCOVER! a-WOOOGAH! a-WOOOGAH!
       DhcpOption::MessageType(DhcpMessageType::DHCPDISCOVER) => {
         // DHCPOFFER
-        offer_value = 2;
-        y = Ipv4Addr::from(u32::from_be_bytes(response[16..20].try_into().unwrap()));
+        y = self.get_client_ip();
+        if p.available(y) {
+          offer_value = DhcpMessageType::DHCPOFFER.into();
+        }
       }
       DhcpOption::MessageType(DhcpMessageType::DHCPREQUEST) => {
         // DHCPACK
-        offer_value = 5;
-        y = Ipv4Addr::from(u32::from_be_bytes(response[16..20].try_into().unwrap()));
+        y = self.get_client_ip();
+        if p.available(y) {
+          offer_value = DhcpMessageType::DHCPACK.into();
+        } else {
+          offer_value = DhcpMessageType::DHCPNAK.into();
+        }
       }
       _ => {}
     }
@@ -382,7 +404,6 @@ impl DhcpMessage {
     response.push(router_option_len);
     response.append(&mut router_option_value.to_vec());
     response.push(option_end);
-    y = Ipv4Addr::from(u32::from_be_bytes(response[16..20].try_into().unwrap()));
     println!("{}, {}", y, self);
     if response.len() < 276 {
       loop {
@@ -416,9 +437,10 @@ impl DhcpMessage {
             match self.options.get("REQUESTED_IP") {
               Some(i) => match i {
                 DhcpOption::RequestedIpAddress(x) => {
-                  // just ACK the client their requested address
                   if p.valid_lease(*x) {
+                    // just ACK the client their requested address
                     yiaddr = x.octets();
+                    println!("acking client {}", Ipv4Addr::from(yiaddr));
                   }
                 }
                 _ => {}
@@ -523,6 +545,10 @@ impl DhcpMessage {
         }
       }
     }
+    println!(
+      "yiaddr at the end of bootp_packet: {}",
+      Ipv4Addr::from(yiaddr)
+    );
     response
   }
 
@@ -552,11 +578,9 @@ impl DhcpMessage {
     Ok(ovec)
   }
 
-  /*
-  pub(crate) fn get_dest_ip(&self) -> Ipv4Addr {
-    return Ipv4Addr::from(self.)
+  pub(crate) fn get_client_ip(&self) -> Ipv4Addr {
+    return Ipv4Addr::from(self.ciaddr);
   }
-  */
 
   pub(crate) fn get_options_index(&self, ba: &[u8]) -> usize {
     let mmc = MAGIC_COOKIE;
