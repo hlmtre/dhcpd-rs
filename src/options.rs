@@ -4,7 +4,11 @@ use std::{
 };
 use std::{fmt, net::IpAddr};
 
-use crate::{config::Config, pool::LeaseStatus, pool::Pool};
+use crate::{
+  config::Config,
+  pool::LeaseStatus,
+  pool::{self, Pool},
+};
 use byte_serialize::BEByteSerializable;
 
 // for reference: the magic cookie marks the start of DHCP options.
@@ -377,8 +381,23 @@ impl DhcpMessage {
       }
       DhcpOption::MessageType(DhcpMessageType::DHCPREQUEST) => {
         // DHCPACK
-        y = self.get_client_ip();
-        if p.available(y) {
+        //y = self.get_client_ip();
+        y = match self.options.get("REQUESTED_IP") {
+          Some(i) => match i {
+            DhcpOption::RequestedIpAddress(x) => *x,
+            _ => Ipv4Addr::UNSPECIFIED,
+          },
+          _ => Ipv4Addr::UNSPECIFIED,
+        };
+        if p.available(y)
+          || p.leases.contains(&pool::Lease {
+            // have we already handed out an IP to this MAC?
+            hwaddr: self.chaddr.clone(),
+            ip: y,
+            lease_timestamp: SystemTime::now(),
+            lease_len: 0,
+          })
+        {
           offer_value = DhcpMessageType::DHCPACK.into();
         } else {
           offer_value = DhcpMessageType::DHCPNAK.into();
@@ -458,7 +477,7 @@ impl DhcpMessage {
                         break;
                       }
                       LeaseStatus::Decaying => {
-                        l.update_lease(SystemTime::now()); // update the lease
+                        l.update_lease(SystemTime::now());
                         yiaddr = l.ip.octets();
                         found = true;
                         break;

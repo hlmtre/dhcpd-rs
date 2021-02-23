@@ -33,7 +33,11 @@ pub enum PoolError {
 
 impl PartialEq for Lease {
   fn eq(&self, other: &Self) -> bool {
-    if self.ip == other.ip {
+    println!(
+      "comparing {} to {} and {:02x?} to {:02x?}",
+      self.ip, other.ip, self.hwaddr, other.hwaddr
+    );
+    if self.ip == other.ip && self.hwaddr == other.hwaddr {
       return true;
     }
     return false;
@@ -41,7 +45,7 @@ impl PartialEq for Lease {
 }
 
 impl Lease {
-  pub fn lease_status(&self) -> LeaseStatus {
+  pub(crate) fn lease_status(&self) -> LeaseStatus {
     if self.lease_timestamp.elapsed().unwrap() > Duration::from_secs(self.lease_len.into()) {
       return LeaseStatus::Expired;
     } else if self.lease_timestamp.elapsed().unwrap()
@@ -53,7 +57,7 @@ impl Lease {
     }
   }
 
-  pub fn update_lease(&mut self, lt: SystemTime) {
+  pub(crate) fn update_lease(&mut self, lt: SystemTime) {
     self.lease_timestamp = lt;
   }
 }
@@ -76,7 +80,13 @@ impl Pool {
     if self.range.len() < 1 {
       return Err(PoolError::PoolExhausted);
     }
-    let ip: Ipv4Addr = self.range[self.range.len() - 1];
+    let i = self.range.pop();
+    let ip = match i {
+      Some(x) => x,
+      None => {
+        return Err(PoolError::PoolExhausted);
+      }
+    };
     let lease_timestamp = SystemTime::now();
     let l: Lease = Lease {
       ip,
