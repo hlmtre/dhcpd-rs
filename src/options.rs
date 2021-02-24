@@ -347,7 +347,7 @@ impl DhcpMessage {
     let mut response = self.build_bootp_packet(p, c);
     let offer: u8 = 53;
     let offer_len: u8 = 1;
-    let mut offer_value: u8 = 2;
+    let mut offer_value: u8 = 0;
     let dhcp_server_id: u8 = 54;
     let dhcp_server_id_len: u8 = 4;
     let a = c.bind_address.ip();
@@ -375,8 +375,33 @@ impl DhcpMessage {
       DhcpOption::MessageType(DhcpMessageType::DHCPDISCOVER) => {
         // DHCPOFFER
         y = self.get_client_ip();
-        if p.available(y) {
+        if y.is_unspecified() {
+          y = match self.options.get("REQUESTED_IP") {
+            Some(i) => match i {
+              DhcpOption::RequestedIpAddress(x) => *x,
+              _ => y,
+            },
+            _ => y,
+          };
+        }
+        if !y.is_unspecified() && p.available(y) {
           offer_value = DhcpMessageType::DHCPOFFER.into();
+        } else {
+          offer_value = DhcpMessageType::DHCPOFFER.into();
+          y = match p.ip_for_mac(self.chaddr.clone()) {
+            // did we already give out an IP to this mac?
+            Ok(m) => m,
+            Err(_) => {
+              let l = p.allocate_address(self.chaddr.clone(), c.lease_time);
+              match l {
+                Ok(x) => x.ip,
+                Err(_) => {
+                  offer_value = DhcpMessageType::DHCPNAK.into();
+                  Ipv4Addr::LOCALHOST
+                }
+              }
+            }
+          }
         }
       }
       DhcpOption::MessageType(DhcpMessageType::DHCPREQUEST) => {
@@ -405,6 +430,10 @@ impl DhcpMessage {
       }
       _ => {}
     }
+    response[16] = y.octets()[0];
+    response[17] = y.octets()[1];
+    response[18] = y.octets()[2];
+    response[19] = y.octets()[3];
     response.append(&mut magic_cookie.to_vec());
     assert_eq!(response.len(), 240);
     response.push(offer);

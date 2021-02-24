@@ -122,6 +122,15 @@ impl Pool {
     Err(PoolError::RequestedAddressOutOfRange)
   }
 
+  pub(crate) fn ip_for_mac(&self, mac: Vec<u8>) -> Result<Ipv4Addr, PoolError> {
+    for l in self.leases.iter() {
+      if l.hwaddr == mac {
+        return Ok(l.ip.clone());
+      }
+    }
+    return Err(PoolError::RequestedAddressAlreadyAssigned);
+  }
+
   pub(crate) fn valid_lease(&self, a: Ipv4Addr) -> bool {
     for l in self.leases.iter() {
       if l.ip == a {
