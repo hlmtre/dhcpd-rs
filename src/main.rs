@@ -101,11 +101,6 @@ fn main() -> std::io::Result<()> {
     c.dhcp_range.first().unwrap().to_owned(),
     c.dhcp_range.last().unwrap().to_owned(),
   );
-
-  /*
-  let socket = UdpSocket::bind(c.listening_address)?;
-  socket.set_nonblocking(true).unwrap();
-  */
   let socket = match Socket::new(Domain::ipv4(), Type::dgram(), Some(Protocol::udp())) {
     Ok(a) => a,
     _ => panic!("couldn't create socket :("),
@@ -119,11 +114,14 @@ fn main() -> std::io::Result<()> {
   socket
     .bind(&c.listening_address.into())
     .expect(format!("couldn't bind to {}", c.listening_address).as_str());
-  socket.broadcast().expect("couldn't broadcast! :(");
-  //socket.listen(1024).expect("couldn't listen :(");
+  socket.set_broadcast(true).expect("couldn't broadcast! :(");
   if c.debug {
-    println!("==> bound to {}", c.bind_address);
-    println!("==> listening on {}", "0.0.0.0:67");
+    if c.interface.len() > 0 {
+      println!("==> bound to {} on {:?}", c.bind_address, socket.device());
+    } else {
+      println!("==> bound to {}", c.bind_address);
+    }
+    println!("==> listening on {}", c.listening_address);
   }
   /*
   The 'options' field is now variable length. A DHCP client must be
@@ -176,7 +174,7 @@ fn main() -> std::io::Result<()> {
           }
         }
         let x = d.construct_response(&c, &mut p);
-        let u = UdpSocket::bind(c.bind_address)?;
+        //let u = UdpSocket::bind(c.bind_address)?;
         let source = Ipv4Addr::from(d.ciaddr);
         // if the client specifies an IP (renewing), unicast to that
         // otherwise we have to broadcast (DHCPDISCOVER, DHCPREQUEST)
@@ -185,11 +183,19 @@ fn main() -> std::io::Result<()> {
         } else {
           Ipv4Addr::BROADCAST
         };
-        let target_socket = SocketAddrV4::new(target, 68);
-        let _ = u.set_broadcast(true);
-        let _ = u
-          .send_to(&x, target_socket)
-          .expect("couldn't send to broadcast :(");
+        // we've already set_broadcast, so that's fine
+        // but we gotta also allow reuse of the port
+        let _ = socket.set_reuse_port(true);
+        //let _ = socket.set_reuse_address(true);
+        let n = socket.send_to(&x, &SocketAddrV4::new(target, 68).into());
+        match n {
+          Ok(num_bytes) => {
+            println!("sent {} bytes", num_bytes);
+          }
+          Err(e) => {
+            println!("error sending on socket {:?}. error: {}", socket, e);
+          }
+        }
         //let a = p.allocate_address(d.chaddr, c.lease_time);
       }
       Err(_) => {}
