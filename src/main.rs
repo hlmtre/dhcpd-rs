@@ -1,3 +1,7 @@
+extern crate socket2;
+
+use socket2::{Domain, Protocol, SockAddr, Socket, Type};
+
 mod config;
 mod options;
 mod pool;
@@ -8,6 +12,7 @@ use crate::{
 };
 use std::{
   env,
+  ffi::CString,
   net::{IpAddr, Ipv4Addr, SocketAddrV4, UdpSocket},
 };
 
@@ -26,6 +31,9 @@ fn main() -> std::io::Result<()> {
             .parse::<Ipv4Addr>()
             .expect("Invalid binding address!"),
         ));
+      }
+      "--interface" | "-i" => {
+        c.interface = args[counter + 1].clone();
       }
       "--debug" | "-d" => {
         c.debug = true;
@@ -94,9 +102,25 @@ fn main() -> std::io::Result<()> {
     c.dhcp_range.last().unwrap().to_owned(),
   );
 
+  /*
   let socket = UdpSocket::bind(c.listening_address)?;
   socket.set_nonblocking(true).unwrap();
-  let _ = socket.set_broadcast(true);
+  */
+  let socket = match Socket::new(Domain::ipv4(), Type::dgram(), Some(Protocol::udp())) {
+    Ok(a) => a,
+    _ => panic!("couldn't create socket :("),
+  };
+  if c.interface.clone().len() > 0 {
+    socket
+      .bind_device(Some(&CString::new(c.interface.clone()).unwrap()))
+      .expect(format!("couldn't bind to {}", c.interface).as_str());
+  }
+  // 1024 is the number of 'backlogged' connections that we can hold onto in a queue
+  socket
+    .bind(&c.listening_address.into())
+    .expect(format!("couldn't bind to {}", c.listening_address).as_str());
+  socket.broadcast().expect("couldn't broadcast! :(");
+  //socket.listen(1024).expect("couldn't listen :(");
   if c.debug {
     println!("==> bound to {}", c.bind_address);
     println!("==> listening on {}", "0.0.0.0:67");
@@ -201,12 +225,13 @@ fn help() {
     -h, --help : this help message
     --address : <address> (address to bind to).
     --debug : debug (don't background, prints debugging output).
-    --subnet : subnet mask to give to clients (255.255.255.0, for example).
-    --routers : routers to give to clients (in order of preference; <192.168.122.1,192.168.6.1>, for example). NO SPACES.
-    --range : range to assign to clients (<192.168.5.50,192.168.5.150>, for example). NO SPACES.
     --dns : dns servers to advertise (<192.168.5.4,192.168.5.5>, for example). NO SPACES.
     --domain : domain to advertise (for clients to append to otherwise-unqualified dns queries).
     --leasetime : lease time to advertise. specify in hours (12h, 24h, 72h, etc).
+    --interface : interface to bind to. if unspecified, binds to all interfaces.
+    --subnet : subnet mask to give to clients (255.255.255.0, for example).
+    --routers : routers to give to clients (in order of preference; <192.168.122.1,192.168.6.1>, for example). NO SPACES.
+    --range : range to assign to clients (<192.168.5.50,192.168.5.150>, for example). NO SPACES.
 "#;
   println!("{}", help_string);
   std::process::exit(0);

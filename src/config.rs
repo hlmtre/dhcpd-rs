@@ -13,6 +13,7 @@ pub(crate) struct Config {
   */
   pub debug: bool,
   pub listening_address: SocketAddr,
+  pub interface: String,
   pub bind_address: SocketAddr,
   pub routers: Vec<Ipv4Addr>,
   pub subnet: Ipv4Addr,
@@ -58,6 +59,7 @@ impl Config {
       debug: true,
       listening_address: "0.0.0.0:67".parse::<SocketAddr>().unwrap(),
       bind_address: "0.0.0.0:68".parse::<SocketAddr>().unwrap(),
+      interface: "".to_string(),
       routers: Vec::new(),
       subnet: "255.255.255.0".parse::<Ipv4Addr>().unwrap(),
       dhcp_range: Vec::new(),
