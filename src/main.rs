@@ -121,27 +121,35 @@ fn main() -> std::io::Result<()> {
         let mut d: DhcpMessage = DhcpMessage::default();
         let filled_buf: &mut [u8] = &mut buf[..l];
         d.parse(filled_buf);
+        /*
         println!(
           "{:?} {:?} from {}",
           std::time::SystemTime::now(),
           d.options.get("MESSAGETYPE").unwrap(),
           d
         );
+        */
         // if the dest address is us or broadcast
         let _f = d.options.get("SERVER_IDENTIFIER");
         match _f {
           Some(_g) => match _g {
             DhcpOption::ServerIdentifier(a) => {
+              println!("server identifier: {:?}", _g);
               if IpAddr::V4(a.clone()) != c.bind_address.ip() && !a.is_broadcast() {
-                println!("to {}; not for us ({})", a.clone(), c.bind_address.ip());
+                println!("{} != {}", c.bind_address.ip(), a);
                 continue;
-              } else {
-                println!("target is us! awooooo-gah! awooo-gah!");
               }
             }
-            _ => {}
+            _ => {
+              println!("default: {:?}", _g);
+            }
           },
-          None => {}
+          None => {
+            println!(
+              "no server identifier. peer address: {:?}",
+              socket.peer_addr()
+            );
+          }
         }
         let x = d.construct_response(&c, &mut p);
         let u = UdpSocket::bind(c.bind_address)?;
@@ -162,6 +170,13 @@ fn main() -> std::io::Result<()> {
       }
       Err(_) => {}
     }
+    /*
+    let mut b = String::new();
+    std::io::Read::read_to_string(&mut std::io::stdin(), &mut b)?;
+    if b == "l" {
+      println!("Leases: {:?}", p.leases);
+    }
+    */
     std::thread::sleep(std::time::Duration::from_millis(10));
   }
   #[allow(unreachable_code)]

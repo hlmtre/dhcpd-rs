@@ -378,7 +378,10 @@ impl DhcpMessage {
         if y.is_unspecified() {
           y = match self.options.get("REQUESTED_IP") {
             Some(i) => match i {
-              DhcpOption::RequestedIpAddress(x) => *x,
+              DhcpOption::RequestedIpAddress(x) => {
+                println!("HERE 4");
+                *x
+              }
               _ => y,
             },
             _ => y,
@@ -390,8 +393,13 @@ impl DhcpMessage {
           offer_value = DhcpMessageType::DHCPOFFER.into();
           y = match p.ip_for_mac(self.chaddr.clone()) {
             // did we already give out an IP to this mac?
-            Ok(m) => m,
-            Err(_) => {
+            Ok(m) => {
+              println!("IP {} for MAC {}", m, format_mac(&self.chaddr.clone()));
+              m
+            }
+            Err(e) => {
+              println!("{:?}", e);
+              println!("HERE 6");
               let l = p.allocate_address(self.chaddr.clone(), c.lease_time);
               match l {
                 Ok(x) => x.ip,
@@ -405,8 +413,7 @@ impl DhcpMessage {
         }
       }
       DhcpOption::MessageType(DhcpMessageType::DHCPREQUEST) => {
-        // DHCPACK
-        //y = self.get_client_ip();
+        // client is requesting an IP
         y = match self.options.get("REQUESTED_IP") {
           Some(i) => match i {
             DhcpOption::RequestedIpAddress(x) => *x,
@@ -414,6 +421,7 @@ impl DhcpMessage {
           },
           _ => Ipv4Addr::UNSPECIFIED,
         };
+        // if it's available AND this client had it before...
         if p.available(y)
           || p.leases.contains(&pool::Lease {
             // have we already handed out an IP to this MAC?
@@ -423,8 +431,20 @@ impl DhcpMessage {
             lease_len: 0,
           })
         {
+          println!(
+            "Received DHCPREQUEST for {} from {}, ACKing...",
+            y,
+            format_mac(&self.chaddr)
+          );
           offer_value = DhcpMessageType::DHCPACK.into();
         } else {
+          // no IP for you
+          println!(
+            "Received DHCPREQUEST for {} from {}, available?: {}. NAKed.",
+            y,
+            format_mac(&self.chaddr),
+            p.available(y)
+          );
           offer_value = DhcpMessageType::DHCPNAK.into();
         }
       }
@@ -452,7 +472,7 @@ impl DhcpMessage {
     response.push(router_option_len);
     response.append(&mut router_option_value.to_vec());
     response.push(option_end);
-    println!("{}, {}", y, self);
+    //println!("{}, {}", y, self);
     if response.len() < 276 {
       loop {
         response.push(0);
@@ -506,6 +526,7 @@ impl DhcpMessage {
                         break;
                       }
                       LeaseStatus::Decaying => {
+                        println!("HERE 2");
                         l.update_lease(SystemTime::now());
                         yiaddr = l.ip.octets();
                         found = true;
@@ -527,9 +548,8 @@ impl DhcpMessage {
                 if !found {
                   yiaddr = match p.allocate_address(chaddr.clone(), c.lease_time) {
                     Ok(l) => l.ip.octets(),
-                    Err(_) => {
-                      let a = [0 as u8; 4];
-                      a
+                    Err(e) => {
+                      panic!("{:?}", e);
                     }
                   };
                   println!(
@@ -553,6 +573,7 @@ impl DhcpMessage {
       },
       None => {}
     }
+    println!("YIADDR: {}", Ipv4Addr::from(yiaddr));
     let siaddr: [u8; 4] = self.siaddr.to_be_bytes();
     let giaddr: [u8; 4] = Ipv4Addr::new(0, 0, 0, 0).octets();
     let sname: &str = "dhcpd-rs.lan.zero9f9.com";
@@ -593,10 +614,6 @@ impl DhcpMessage {
         }
       }
     }
-    println!(
-      "yiaddr at the end of bootp_packet: {}",
-      Ipv4Addr::from(yiaddr)
-    );
     response
   }
 
