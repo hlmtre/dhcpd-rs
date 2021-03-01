@@ -1,5 +1,6 @@
 extern crate socket2;
 
+use pool::Pool;
 use socket2::{Domain, Protocol, Socket, Type};
 
 mod config;
@@ -99,7 +100,7 @@ fn main() -> std::io::Result<()> {
     eprintln!("==> {:?}", c);
   }
 
-  let mut p = pool::Pool::new(
+  let mut p = Pool::new(
     c.dhcp_range.first().unwrap().to_owned(),
     c.dhcp_range.last().unwrap().to_owned(),
   );

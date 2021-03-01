@@ -9,10 +9,6 @@ use crate::{
   pool::{Lease, LeaseStatus, Pool},
 };
 
-// for reference: the magic cookie marks the start of DHCP options.
-// otherwise you'd never know where the options start after the fixed length of the base bootp message
-const MAGIC_COOKIE: [u8; 4] = [0x63, 0x82, 0x53, 0x63];
-
 /*
    0                   1                   2                   3
    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -337,7 +333,6 @@ impl DhcpMessage {
     // this is followed by the client going 'sounds good, gimme' (DHCPREQUEST)
     // and finally our DHCPACK
     self.parse_prl();
-    let magic_cookie = MAGIC_COOKIE;
     let mut response = self.build_bootp_packet(p, c);
     let offer: u8 = 53;
     let offer_len: u8 = 1;
@@ -448,7 +443,7 @@ impl DhcpMessage {
     response[17] = y.octets()[1];
     response[18] = y.octets()[2];
     response[19] = y.octets()[3];
-    response.append(&mut magic_cookie.to_vec());
+    response.append(&mut MAGIC_COOKIE.to_vec());
     assert_eq!(response.len(), 240);
     response.push(offer);
     response.push(offer_len);
@@ -642,14 +637,13 @@ impl DhcpMessage {
   }
 
   pub(crate) fn get_options_index(&self, ba: &[u8]) -> usize {
-    let mmc = MAGIC_COOKIE;
     // examine each four bytes - are they our magic cookie?
     // they have to start at the end of the base bootp data
     let mut start: usize = 200;
     let mut end: usize = 204;
     let ba_len = ba.len();
     for _b in 0..=ba_len {
-      if ba[start..end] == mmc {
+      if ba[start..end] == MAGIC_COOKIE {
         return start;
       }
       start += 1;

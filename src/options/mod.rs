@@ -1,5 +1,8 @@
 pub mod byte_serialize;
 
+// for reference: the magic cookie marks the start of DHCP options.
+// otherwise you'd never know where the options start after the fixed length of the base bootp message
+pub const MAGIC_COOKIE: [u8; 4] = [0x63, 0x82, 0x53, 0x63];
 ///
 /// stolen from https://github.com/krolaw/dhcp4r/blob/master/src/options.rs, thank you very much
 ///
