@@ -1,19 +1,21 @@
 extern crate socket2;
 
-use socket2::{Domain, Protocol, SockAddr, Socket, Type};
+use socket2::{Domain, Protocol, Socket, Type};
 
 mod config;
+mod dhcpmessage;
 mod options;
 mod pool;
 
 use crate::{
   config::Config,
-  options::{DhcpMessage, DhcpOption},
+  dhcpmessage::{DhcpMessage, DhcpOption},
+  options::SERVER_IDENTIFIER,
 };
 use std::{
   env,
   ffi::CString,
-  net::{IpAddr, Ipv4Addr, SocketAddrV4, UdpSocket},
+  net::{IpAddr, Ipv4Addr, SocketAddrV4},
 };
 
 fn main() -> std::io::Result<()> {
@@ -152,7 +154,7 @@ fn main() -> std::io::Result<()> {
         );
         */
         // if the dest address is us or broadcast
-        let _f = d.options.get("SERVER_IDENTIFIER");
+        let _f = d.options.get(&SERVER_IDENTIFIER);
         match _f {
           Some(_g) => match _g {
             DhcpOption::ServerIdentifier(a) => {

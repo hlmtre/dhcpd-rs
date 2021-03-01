@@ -1,4 +1,3 @@
-mod byte_serialize;
 use std::{
   collections::HashMap, convert::TryInto, fmt::Formatter, net::Ipv4Addr, time::SystemTime,
 };
@@ -6,10 +5,9 @@ use std::{fmt, net::IpAddr};
 
 use crate::{
   config::Config,
-  pool::LeaseStatus,
-  pool::{self, Pool},
+  options::{byte_serialize::BEByteSerializable, title, *},
+  pool::{Lease, LeaseStatus, Pool},
 };
-use byte_serialize::BEByteSerializable;
 
 // for reference: the magic cookie marks the start of DHCP options.
 // otherwise you'd never know where the options start after the fixed length of the base bootp message
@@ -81,7 +79,7 @@ pub(crate) struct DhcpMessage {
   pub chaddr: Vec<u8>,
   sname: usize,
   file: usize,
-  pub options: HashMap<String, DhcpOption>,
+  pub options: HashMap<u8, DhcpOption>,
 }
 
 #[derive(Debug, Clone)]
@@ -216,7 +214,7 @@ impl DhcpMessage {
               Ok(a) => {
                 self
                   .options
-                  .insert("DNS_SERVERS".to_string(), DhcpOption::DomainNameServer(a));
+                  .insert(DOMAIN_NAME_SERVER, DhcpOption::DomainNameServer(a));
               }
               Err(e) => {
                 eprintln!("{:#?}", e);
@@ -230,9 +228,7 @@ impl DhcpMessage {
             let b = Self::take_next(&self, buf, &mut current_index, len.into()).unwrap();
             match Self::get_ipv4_array(&self, len.into(), b) {
               Ok(a) => {
-                self
-                  .options
-                  .insert("ROUTERS".to_string(), DhcpOption::Router(a));
+                self.options.insert(ROUTER, DhcpOption::Router(a));
               }
               Err(e) => {
                 eprintln!("{:#?}", e);
@@ -246,10 +242,9 @@ impl DhcpMessage {
             let b = Self::take_next(&self, buf, &mut current_index, len.into()).unwrap();
             match Self::get_ipv4_array(&self, len.into(), b) {
               Ok(a) => {
-                self.options.insert(
-                  "SERVER_IDENTIFIER".to_string(),
-                  DhcpOption::ServerIdentifier(a[0]),
-                );
+                self
+                  .options
+                  .insert(SERVER_IDENTIFIER, DhcpOption::ServerIdentifier(a[0]));
               }
               Err(e) => {
                 eprintln!("{:#?}", e);
@@ -265,7 +260,7 @@ impl DhcpMessage {
               Self::take_next(&self, buf, &mut current_index, dhcp_message_type_len.into())
                 .unwrap()[0];
             self.options.insert(
-              "MESSAGETYPE".to_string(),
+              DHCP_MESSAGE_TYPE,
               DhcpOption::MessageType(dhcp_message_type.into()),
             );
           }
@@ -278,7 +273,7 @@ impl DhcpMessage {
               prl_vec.push(buf[_x]);
             }
             self.options.insert(
-              "PARAMETER_REQUEST_LIST".to_string(),
+              PARAMETER_REQUEST_LIST,
               DhcpOption::ParameterRequestList(prl_vec),
             );
             current_index = current_index + prl_len;
@@ -289,10 +284,9 @@ impl DhcpMessage {
             let fb =
               Self::take_next(&self, buf, &mut current_index, subnet_mask_len.into()).unwrap();
             let subnet_mask: Ipv4Addr = Ipv4Addr::new(fb[0], fb[1], fb[2], fb[3]);
-            self.options.insert(
-              "SUBNET_MASK".to_string(),
-              DhcpOption::SubnetMask(subnet_mask),
-            );
+            self
+              .options
+              .insert(SUBNET_MASK, DhcpOption::SubnetMask(subnet_mask));
           }
           // requested IP address
           // dec50
@@ -301,10 +295,9 @@ impl DhcpMessage {
             let four_bee =
               Self::take_next(&self, buf, &mut current_index, request_len.into()).unwrap();
             let ip: Ipv4Addr = Ipv4Addr::new(four_bee[0], four_bee[1], four_bee[2], four_bee[3]);
-            self.options.insert(
-              "REQUESTED_IP".to_string(),
-              DhcpOption::RequestedIpAddress(ip),
-            );
+            self
+              .options
+              .insert(REQUESTED_IP_ADDRESS, DhcpOption::RequestedIpAddress(ip));
           }
           // dec12 hostname
           0x0c => {
@@ -312,7 +305,7 @@ impl DhcpMessage {
             let hostname =
               Self::take_next(&self, buf, &mut current_index, hostname_len.into()).unwrap();
             self.options.insert(
-              "HOSTNAME".to_string(),
+              HOST_NAME,
               DhcpOption::Hostname(std::str::from_utf8(&hostname).unwrap().to_string()),
             );
           }
@@ -343,6 +336,7 @@ impl DhcpMessage {
     // build our first response, and offer the client an IP
     // this is followed by the client going 'sounds good, gimme' (DHCPREQUEST)
     // and finally our DHCPACK
+    self.parse_prl();
     let magic_cookie = MAGIC_COOKIE;
     let mut response = self.build_bootp_packet(p, c);
     let offer: u8 = 53;
@@ -370,13 +364,13 @@ impl DhcpMessage {
     let option_end: u8 = 255;
     let mut y: Ipv4Addr = Ipv4Addr::UNSPECIFIED;
 
-    match *self.options.get("MESSAGETYPE").unwrap() {
+    match *self.options.get(&DHCP_MESSAGE_TYPE).unwrap() {
       // a DISCOVER! a-WOOOGAH! a-WOOOGAH!
       DhcpOption::MessageType(DhcpMessageType::DHCPDISCOVER) => {
         // DHCPOFFER
         y = self.get_client_ip();
         if y.is_unspecified() {
-          y = match self.options.get("REQUESTED_IP") {
+          y = match self.options.get(&REQUESTED_IP_ADDRESS) {
             Some(i) => match i {
               DhcpOption::RequestedIpAddress(x) => {
                 println!("HERE 4");
@@ -414,7 +408,7 @@ impl DhcpMessage {
       }
       DhcpOption::MessageType(DhcpMessageType::DHCPREQUEST) => {
         // client is requesting an IP
-        y = match self.options.get("REQUESTED_IP") {
+        y = match self.options.get(&REQUESTED_IP_ADDRESS) {
           Some(i) => match i {
             DhcpOption::RequestedIpAddress(x) => *x,
             _ => Ipv4Addr::UNSPECIFIED,
@@ -423,7 +417,7 @@ impl DhcpMessage {
         };
         // if it's available AND this client had it before...
         if p.available(y)
-          || p.leases.contains(&pool::Lease {
+          || p.leases.contains(&Lease {
             // have we already handed out an IP to this MAC?
             hwaddr: self.chaddr.clone(),
             ip: y,
@@ -498,11 +492,11 @@ impl DhcpMessage {
     let mut chaddr = self.chaddr.clone();
     // TODO some stuff in here so we understand the 'conversation' part of the dhcp conversation
     // remember the xid
-    match self.options.get("MESSAGETYPE") {
+    match self.options.get(&DHCP_MESSAGE_TYPE) {
       Some(i) => match i {
         DhcpOption::MessageType(x) => match x {
           DhcpMessageType::DHCPDISCOVER | DhcpMessageType::DHCPREQUEST => {
-            match self.options.get("REQUESTED_IP") {
+            match self.options.get(&REQUESTED_IP_ADDRESS) {
               Some(i) => match i {
                 DhcpOption::RequestedIpAddress(x) => {
                   if p.valid_lease(*x) {
@@ -667,5 +661,20 @@ impl DhcpMessage {
     }
     // if we didn't find it already
     0
+  }
+
+  fn parse_prl(&self) -> Vec<u8> {
+    match self.options.get(&PARAMETER_REQUEST_LIST) {
+      Some(d) => match d {
+        DhcpOption::ParameterRequestList(a) => {
+          for _a in a {
+            println!("{:?}", title(*_a));
+          }
+        }
+        _ => {}
+      },
+      None => {}
+    }
+    Vec::new()
   }
 }
