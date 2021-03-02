@@ -332,7 +332,6 @@ impl DhcpMessage {
     // build our first response, and offer the client an IP
     // this is followed by the client going 'sounds good, gimme' (DHCPREQUEST)
     // and finally our DHCPACK
-    self.parse_prl();
     let mut response = self.build_bootp_packet(p, c);
     let offer: u8 = 53;
     let offer_len: u8 = 1;
@@ -445,6 +444,31 @@ impl DhcpMessage {
     response[19] = y.octets()[3];
     response.append(&mut MAGIC_COOKIE.to_vec());
     assert_eq!(response.len(), 240);
+    let p = self.get_prl();
+    for x in p {
+      match x {
+        1 => {
+          response.push(subnet_mask_option);
+          response.push(subnet_mask_len);
+          response.append(&mut subnet_mask.to_vec());
+        }
+        3 => {
+          response.push(router_option);
+          response.push(router_option_len);
+          response.append(&mut router_option_value.to_vec());
+        } // DNS servers, rest of the parameter requests list etc
+        6 => {
+          response.push(6);
+          response.push((c.dns_servers.len() * 4).try_into().unwrap());
+          c.dns_servers.clone().into_iter().for_each(|i| {
+            i.octets().iter().for_each(|o| {
+              response.push(*o);
+            });
+          });
+        }
+        _ => {}
+      }
+    }
     response.push(offer);
     response.push(offer_len);
     response.push(offer_value);
@@ -454,12 +478,6 @@ impl DhcpMessage {
     response.push(lease_time_option);
     response.push(lease_time_len);
     response.append(&mut lease_time.to_be_bytes().to_vec());
-    response.push(subnet_mask_option);
-    response.push(subnet_mask_len);
-    response.append(&mut subnet_mask.to_vec());
-    response.push(router_option);
-    response.push(router_option_len);
-    response.append(&mut router_option_value.to_vec());
     response.push(option_end);
     //println!("{}, {}", y, self);
     if response.len() < 276 {
@@ -515,7 +533,6 @@ impl DhcpMessage {
                         break;
                       }
                       LeaseStatus::Decaying => {
-                        println!("HERE 2");
                         l.update_lease(SystemTime::now());
                         yiaddr = l.ip.octets();
                         found = true;
@@ -562,7 +579,6 @@ impl DhcpMessage {
       },
       None => {}
     }
-    println!("YIADDR: {}", Ipv4Addr::from(yiaddr));
     let siaddr: [u8; 4] = self.siaddr.to_be_bytes();
     let giaddr: [u8; 4] = Ipv4Addr::new(0, 0, 0, 0).octets();
     let sname: &str = "dhcpd-rs.lan.zero9f9.com";
@@ -657,18 +673,13 @@ impl DhcpMessage {
     0
   }
 
-  fn parse_prl(&self) -> Vec<u8> {
+  fn get_prl(&self) -> Vec<u8> {
     match self.options.get(&PARAMETER_REQUEST_LIST) {
       Some(d) => match d {
-        DhcpOption::ParameterRequestList(a) => {
-          for _a in a {
-            println!("{:?}", title(*_a));
-          }
-        }
-        _ => {}
+        DhcpOption::ParameterRequestList(a) => return a.clone(),
+        _ => return Vec::new(),
       },
-      None => {}
+      None => return Vec::new(),
     }
-    Vec::new()
   }
 }
