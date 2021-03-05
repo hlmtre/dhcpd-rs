@@ -203,7 +203,7 @@ impl DhcpMessage {
         // the data and advancing to the end of it
         Ok(n) => match n[0] {
           // specified dns servers, r >= 1
-          0x05 => {
+          DOMAIN_NAME_SERVER => {
             let len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
             let b = Self::take_next(&self, buf, &mut current_index, len.into()).unwrap();
             match Self::get_ipv4_array(&self, len.into(), b) {
@@ -219,7 +219,7 @@ impl DhcpMessage {
             }
           }
           // routers
-          0x03 => {
+          ROUTER => {
             let len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
             let b = Self::take_next(&self, buf, &mut current_index, len.into()).unwrap();
             match Self::get_ipv4_array(&self, len.into(), b) {
@@ -233,7 +233,7 @@ impl DhcpMessage {
             }
           }
           // dec54: server identifier
-          0x36 => {
+          SERVER_IDENTIFIER => {
             let len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
             let b = Self::take_next(&self, buf, &mut current_index, len.into()).unwrap();
             match Self::get_ipv4_array(&self, len.into(), b) {
@@ -249,7 +249,7 @@ impl DhcpMessage {
             }
           }
           // dec53: dhcp message type
-          0x35 => {
+          DHCP_MESSAGE_TYPE => {
             let dhcp_message_type_len =
               Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
             let dhcp_message_type =
@@ -261,7 +261,7 @@ impl DhcpMessage {
             );
           }
           // dec55: parameter request list
-          0x37 => {
+          PARAMETER_REQUEST_LIST => {
             let prl_len: usize =
               Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0].into();
             let mut prl_vec: Vec<u8> = Vec::new();
@@ -275,7 +275,7 @@ impl DhcpMessage {
             current_index = current_index + prl_len;
           }
           // subnet mask
-          0x01 => {
+          SUBNET_MASK => {
             let subnet_mask_len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
             let fb =
               Self::take_next(&self, buf, &mut current_index, subnet_mask_len.into()).unwrap();
@@ -286,7 +286,7 @@ impl DhcpMessage {
           }
           // requested IP address
           // dec50
-          0x32 => {
+          REQUESTED_IP_ADDRESS => {
             let request_len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
             let four_bee =
               Self::take_next(&self, buf, &mut current_index, request_len.into()).unwrap();
@@ -296,7 +296,7 @@ impl DhcpMessage {
               .insert(REQUESTED_IP_ADDRESS, DhcpOption::RequestedIpAddress(ip));
           }
           // dec12 hostname
-          0x0c => {
+          HOST_NAME => {
             let hostname_len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
             let hostname =
               Self::take_next(&self, buf, &mut current_index, hostname_len.into()).unwrap();
