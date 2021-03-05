@@ -5,7 +5,7 @@ use std::{fmt, net::IpAddr};
 
 use crate::{
   config::Config,
-  options::{byte_serialize::BEByteSerializable, title, *},
+  options::{byte_serialize::BEByteSerializable, *},
   pool::{Lease, LeaseStatus, Pool},
 };
 
@@ -333,23 +333,18 @@ impl DhcpMessage {
     // this is followed by the client going 'sounds good, gimme' (DHCPREQUEST)
     // and finally our DHCPACK
     let mut response = self.build_bootp_packet(p, c);
-    let offer: u8 = 53;
     let offer_len: u8 = 1;
     let mut offer_value: u8 = 0;
-    let dhcp_server_id: u8 = 54;
     let dhcp_server_id_len: u8 = 4;
     let a = c.bind_address.ip();
     let dhcp_server_id_value: [u8; 4] = match a {
       IpAddr::V4(ip4) => ip4.octets(),
       IpAddr::V6(_) => Ipv4Addr::UNSPECIFIED.octets(),
     };
-    let lease_time_option: u8 = 51;
     let lease_time_len: u8 = 4;
     let lease_time: u32 = c.lease_time;
-    let subnet_mask_option: u8 = 0x01;
     let subnet_mask_len: u8 = 4;
     let subnet_mask: [u8; 4] = c.subnet.octets();
-    let router_option: u8 = 3;
     let router_option_len: u8 = 4;
     let mut b = c.routers.clone();
     // so we can pop and get the first one specified
@@ -366,10 +361,7 @@ impl DhcpMessage {
         if y.is_unspecified() {
           y = match self.options.get(&REQUESTED_IP_ADDRESS) {
             Some(i) => match i {
-              DhcpOption::RequestedIpAddress(x) => {
-                println!("HERE 4");
-                *x
-              }
+              DhcpOption::RequestedIpAddress(x) => *x,
               _ => y,
             },
             _ => y,
@@ -409,10 +401,9 @@ impl DhcpMessage {
           },
           _ => Ipv4Addr::UNSPECIFIED,
         };
-        // if it's available AND this client had it before...
+        // if it's available or this client had it before...
         if p.available(y)
           || p.leases.contains(&Lease {
-            // have we already handed out an IP to this MAC?
             hwaddr: self.chaddr.clone(),
             ip: y,
             lease_timestamp: SystemTime::now(),
@@ -420,9 +411,10 @@ impl DhcpMessage {
           })
         {
           println!(
-            "Received DHCPREQUEST for {} from {}, ACKing...",
+            "Received DHCPREQUEST for {} from {}, available? : {}. ACKing...",
             y,
-            format_mac(&self.chaddr)
+            format_mac(&self.chaddr),
+            p.available(y)
           );
           offer_value = DhcpMessageType::DHCPACK.into();
         } else {
@@ -444,21 +436,26 @@ impl DhcpMessage {
     response[19] = y.octets()[3];
     response.append(&mut MAGIC_COOKIE.to_vec());
     assert_eq!(response.len(), 240);
+    response.push(DHCP_MESSAGE_TYPE);
+    response.push(offer_len);
+    response.push(offer_value);
+    // parse our requested parameters to determine what to stick
+    // into the dhcp response portion of our reply
     let p = self.get_prl();
     for x in p {
       match x {
-        1 => {
-          response.push(subnet_mask_option);
+        SUBNET_MASK => {
+          response.push(SUBNET_MASK);
           response.push(subnet_mask_len);
           response.append(&mut subnet_mask.to_vec());
         }
-        3 => {
-          response.push(router_option);
+        ROUTER => {
+          response.push(ROUTER);
           response.push(router_option_len);
           response.append(&mut router_option_value.to_vec());
-        } // DNS servers, rest of the parameter requests list etc
-        6 => {
-          response.push(6);
+        }
+        DOMAIN_NAME_SERVER => {
+          response.push(DOMAIN_NAME_SERVER);
           response.push((c.dns_servers.len() * 4).try_into().unwrap());
           c.dns_servers.clone().into_iter().for_each(|i| {
             i.octets().iter().for_each(|o| {
@@ -469,13 +466,10 @@ impl DhcpMessage {
         _ => {}
       }
     }
-    response.push(offer);
-    response.push(offer_len);
-    response.push(offer_value);
-    response.push(dhcp_server_id);
+    response.push(SERVER_IDENTIFIER);
     response.push(dhcp_server_id_len);
     response.append(&mut dhcp_server_id_value.to_vec());
-    response.push(lease_time_option);
+    response.push(IP_ADDRESS_LEASE_TIME);
     response.push(lease_time_len);
     response.append(&mut lease_time.to_be_bytes().to_vec());
     response.push(option_end);
