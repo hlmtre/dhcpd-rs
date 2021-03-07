@@ -202,7 +202,6 @@ impl DhcpMessage {
         // and then we just match each possible dhcp option with its length, grabbing
         // the data and advancing to the end of it
         Ok(n) => match n[0] {
-          // specified dns servers, r >= 1
           DOMAIN_NAME_SERVER => {
             let len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
             let b = Self::take_next(&self, buf, &mut current_index, len.into()).unwrap();
@@ -218,7 +217,6 @@ impl DhcpMessage {
               }
             }
           }
-          // routers
           ROUTER => {
             let len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
             let b = Self::take_next(&self, buf, &mut current_index, len.into()).unwrap();
@@ -248,7 +246,6 @@ impl DhcpMessage {
               }
             }
           }
-          // dec53: dhcp message type
           DHCP_MESSAGE_TYPE => {
             let dhcp_message_type_len =
               Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
@@ -274,7 +271,6 @@ impl DhcpMessage {
             );
             current_index = current_index + prl_len;
           }
-          // subnet mask
           SUBNET_MASK => {
             let subnet_mask_len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
             let fb =
@@ -284,18 +280,23 @@ impl DhcpMessage {
               .options
               .insert(SUBNET_MASK, DhcpOption::SubnetMask(subnet_mask));
           }
-          // requested IP address
-          // dec50
           REQUESTED_IP_ADDRESS => {
             let request_len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
             let four_bee =
               Self::take_next(&self, buf, &mut current_index, request_len.into()).unwrap();
-            let ip: Ipv4Addr = Ipv4Addr::new(four_bee[0], four_bee[1], four_bee[2], four_bee[3]);
-            self
-              .options
-              .insert(REQUESTED_IP_ADDRESS, DhcpOption::RequestedIpAddress(ip));
+            let i = self.get_ipv4_array(4, four_bee);
+            match i {
+              Ok(mut ip) => {
+                self.options.insert(
+                  REQUESTED_IP_ADDRESS,
+                  DhcpOption::RequestedIpAddress(ip.pop().unwrap()),
+                );
+              }
+              Err(e) => {
+                println!("bad ipv4 address requested");
+              }
+            }
           }
-          // dec12 hostname
           HOST_NAME => {
             let hostname_len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
             let hostname =
