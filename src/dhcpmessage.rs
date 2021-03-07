@@ -318,6 +318,7 @@ impl DhcpMessage {
   /// take a reference to the dhcp message buffer, read everything to jump length,
   /// and increment our current index by jump length.
   /// returns the byte array read as a vector.
+  /// test
   fn take_next(
     &self,
     buf: &[u8],
