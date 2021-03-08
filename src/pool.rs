@@ -33,10 +33,12 @@ pub enum PoolError {
 
 impl PartialEq for Lease {
   fn eq(&self, other: &Self) -> bool {
+    /*
     println!(
       "comparing {} to {} and {:02x?} to {:02x?}",
       self.ip, other.ip, self.hwaddr, other.hwaddr,
     );
+    */
     if self.ip == other.ip && self.hwaddr == other.hwaddr {
       return true;
     }
