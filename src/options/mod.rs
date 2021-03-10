@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 pub mod byte_serialize;
 
 // for reference: the magic cookie marks the start of DHCP options.
@@ -6,6 +7,7 @@ pub const MAGIC_COOKIE: [u8; 4] = [0x63, 0x82, 0x53, 0x63];
 ///
 /// stolen from https://github.com/krolaw/dhcp4r/blob/master/src/options.rs, thank you very much
 ///
+
 // DHCP Options;
 pub const SUBNET_MASK: u8 = 1;
 pub const TIME_OFFSET: u8 = 2;

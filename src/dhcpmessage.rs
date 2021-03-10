@@ -398,9 +398,12 @@ impl DhcpMessage {
         y = match self.options.get(&REQUESTED_IP_ADDRESS) {
           Some(i) => match i {
             DhcpOption::RequestedIpAddress(x) => *x,
-            _ => Ipv4Addr::UNSPECIFIED,
+            _ => {
+              eprintln!("{:?}", self);
+              Ipv4Addr::UNSPECIFIED
+            }
           },
-          _ => Ipv4Addr::UNSPECIFIED,
+          _ => Ipv4Addr::from(self.ciaddr),
         };
         // if it's available or this client had it before...
         if p.available(y)
