@@ -373,12 +373,7 @@ impl DhcpMessage {
           offer_value = DhcpMessageType::DHCPOFFER.into();
           y = match p.ip_for_mac(self.chaddr.clone()) {
             // did we already give out an IP to this mac?
-            Ok(m) => {
-              if c.debug {
-                println!("IP {} for MAC {}", m, format_mac(&self.chaddr.clone()));
-              }
-              m
-            }
+            Ok(m) => m,
             Err(e) => {
               println!("{:?}", e);
               let l = p.allocate_address(self.chaddr.clone(), c.lease_time);
@@ -406,23 +401,31 @@ impl DhcpMessage {
           _ => Ipv4Addr::from(self.ciaddr),
         };
         // if it's available or this client had it before...
-        if p.available(y)
-          || p.leases.contains(&Lease {
-            hwaddr: self.chaddr.clone(),
-            ip: y,
-            lease_timestamp: SystemTime::now(),
-            lease_len: 0,
-          })
-        {
+        if p.available(y) {
           if c.debug {
             println!(
-              "Received DHCPREQUEST for {} from {}, either available or lease for {}. ACKing...",
+              "Received DHCPREQUEST for {} from {}, issuing lease for {}. ACKing...",
+              y,
+              format_mac(&self.chaddr),
+              format_mac(&self.chaddr),
+            );
+          }
+        } else if p.leases.contains(&Lease {
+          hwaddr: self.chaddr.clone(),
+          ip: y,
+          lease_timestamp: SystemTime::now(),
+          lease_len: 0,
+        }) {
+          if c.debug {
+            println!(
+              "Received DHCPREQUEST for {} from {}, re-issuing lease for {}. ACKing...",
               y,
               format_mac(&self.chaddr),
               format_mac(&self.chaddr),
             );
           }
           offer_value = DhcpMessageType::DHCPACK.into();
+          p.update_lease(self.chaddr.clone(), SystemTime::now());
         } else {
           // no IP for you
           if c.debug {

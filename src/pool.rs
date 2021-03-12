@@ -33,12 +33,6 @@ pub enum PoolError {
 
 impl PartialEq for Lease {
   fn eq(&self, other: &Self) -> bool {
-    /*
-    println!(
-      "comparing {} to {} and {:02x?} to {:02x?}",
-      self.ip, other.ip, self.hwaddr, other.hwaddr,
-    );
-    */
     if self.ip == other.ip && self.hwaddr == other.hwaddr {
       return true;
     }
@@ -105,6 +99,14 @@ impl Pool {
       return true;
     }
     false
+  }
+
+  pub(crate) fn update_lease(&mut self, hwaddr: Vec<u8>, lt: SystemTime) {
+    self.leases.iter_mut().for_each(|l| {
+      if l.hwaddr == hwaddr {
+        l.update_lease(lt);
+      }
+    });
   }
 
   pub(crate) fn delete_lease(&mut self, a: Ipv4Addr) -> Result<(), PoolError> {
