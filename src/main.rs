@@ -113,7 +113,6 @@ fn main() -> std::io::Result<()> {
       .bind_device(Some(&CString::new(c.interface.clone()).unwrap()))
       .expect(format!("couldn't bind to {}", c.interface).as_str());
   }
-  // 1024 is the number of 'backlogged' connections that we can hold onto in a queue
   socket
     .bind(&c.listening_address.into())
     .expect(format!("couldn't bind to {}", c.listening_address).as_str());
@@ -199,7 +198,6 @@ fn main() -> std::io::Result<()> {
             println!("error sending on socket {:?}. error: {}", socket, e);
           }
         }
-        //let a = p.allocate_address(d.chaddr, c.lease_time);
       }
       Err(_) => {}
     }

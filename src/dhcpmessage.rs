@@ -409,6 +409,7 @@ impl DhcpMessage {
               format_mac(&self.chaddr),
               format_mac(&self.chaddr),
             );
+            offer_value = DhcpMessageType::DHCPACK.into();
           }
         } else if p.leases.contains(&Lease {
           hwaddr: self.chaddr.clone(),
@@ -453,8 +454,8 @@ impl DhcpMessage {
     response.push(offer_value);
     // parse our requested parameters to determine what to stick
     // into the dhcp response portion of our reply
-    let p = self.get_prl();
-    for x in p {
+    let prl = self.get_prl();
+    for x in prl {
       match x {
         SUBNET_MASK => {
           response.push(SUBNET_MASK);
@@ -499,6 +500,7 @@ impl DhcpMessage {
         }
       }
     }
+    &p.prune_leases();
     return response;
   }
 

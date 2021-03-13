@@ -68,6 +68,25 @@ impl Pool {
     }
   }
 
+  pub(crate) fn prune_leases(&mut self) {
+    let mut i: usize = 0;
+    let mut expired_leases: Vec<usize> = Vec::new();
+    for l in &self.leases {
+      match l.lease_status() {
+        LeaseStatus::Fresh => {}
+        LeaseStatus::Expired => {
+          expired_leases.push(i);
+        }
+        LeaseStatus::Decaying => {}
+      }
+      i += 1;
+    }
+    for position in expired_leases {
+      println!("pruning lease {:?}", self.leases.get(position));
+      self.leases.remove(position);
+    }
+  }
+
   pub(crate) fn allocate_address(
     &mut self,
     hwaddr: Vec<u8>,
