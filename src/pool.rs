@@ -1,9 +1,9 @@
-use std::{net::Ipv4Addr, time::Duration, time::SystemTime};
+use std::{collections::HashMap, net::Ipv4Addr, time::Duration, time::SystemTime};
 
 #[derive(Debug, Clone)]
 pub struct Pool {
   range: Vec<Ipv4Addr>,
-  pub(crate) leases: Vec<Lease>,
+  pub(crate) leases: HashMap<Ipv4Addr, Lease>,
   exclusions: Vec<Ipv4Addr>,
   reservations: Vec<Lease>,
 }
@@ -63,27 +63,25 @@ impl Pool {
     Pool {
       range: Self::enumerate_range(s, e),
       exclusions: Vec::new(),
-      leases: Vec::new(),
+      leases: HashMap::new(),
       reservations: Vec::new(),
     }
   }
 
   pub(crate) fn prune_leases(&mut self) {
-    let mut i: usize = 0;
-    let mut expired_leases: Vec<usize> = Vec::new();
-    for l in &self.leases {
+    let mut expired_leases: Vec<Ipv4Addr> = Vec::new();
+    for (k, l) in &self.leases {
       match l.lease_status() {
         LeaseStatus::Fresh => {}
         LeaseStatus::Expired => {
-          expired_leases.push(i);
+          expired_leases.push(*k);
         }
         LeaseStatus::Decaying => {}
       }
-      i += 1;
     }
     for position in expired_leases {
-      println!("pruning lease {:?}", self.leases.get(position));
-      self.leases.remove(position);
+      println!("pruning lease {:?}", self.leases.get(&position));
+      self.leases.remove(&position);
     }
   }
 
@@ -109,7 +107,7 @@ impl Pool {
       lease_timestamp,
       lease_len,
     };
-    self.leases.push(l.clone());
+    self.leases.insert(ip, l.clone());
     Ok(l)
   }
 
@@ -121,32 +119,22 @@ impl Pool {
   }
 
   pub(crate) fn update_lease(&mut self, hwaddr: Vec<u8>, lt: SystemTime) {
-    self.leases.iter_mut().for_each(|l| {
-      if l.hwaddr == hwaddr {
-        l.update_lease(lt);
+    self.leases.iter_mut().for_each(|(l, k)| {
+      if k.hwaddr == hwaddr {
+        k.update_lease(lt);
       }
     });
   }
 
   pub(crate) fn delete_lease(&mut self, a: Ipv4Addr) -> Result<(), PoolError> {
-    let mut i: usize = 0;
-    let mut in_leases: bool = false;
-    for l in self.leases.iter() {
-      if l.ip == a {
-        in_leases = true;
-        break;
-      }
-      i += 1;
+    match self.leases.remove(&a) {
+      Some(_) => return Ok(()),
+      None => return Err(PoolError::RequestedAddressOutOfRange),
     }
-    self.leases.remove(i);
-    if in_leases {
-      ()
-    }
-    Err(PoolError::RequestedAddressOutOfRange)
   }
 
   pub(crate) fn ip_for_mac(&self, mac: Vec<u8>) -> Result<Ipv4Addr, PoolError> {
-    for l in self.leases.iter() {
+    for (k, l) in self.leases.iter() {
       if l.hwaddr == mac {
         return Ok(l.ip.clone());
       }
@@ -155,7 +143,7 @@ impl Pool {
   }
 
   pub(crate) fn valid_lease(&self, a: Ipv4Addr) -> bool {
-    for l in self.leases.iter() {
+    for (k, l) in self.leases.iter() {
       if l.ip == a {
         if l.lease_status() != LeaseStatus::Expired {
           return true;

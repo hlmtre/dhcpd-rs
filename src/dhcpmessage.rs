@@ -411,22 +411,18 @@ impl DhcpMessage {
             );
             offer_value = DhcpMessageType::DHCPACK.into();
           }
-        } else if p.leases.contains(&Lease {
-          hwaddr: self.chaddr.clone(),
-          ip: y,
-          lease_timestamp: SystemTime::now(),
-          lease_len: 0,
-        }) {
-          if c.debug {
-            println!(
-              "Received DHCPREQUEST for {} from {}, re-issuing lease for {}. ACKing...",
-              y,
-              format_mac(&self.chaddr),
-              format_mac(&self.chaddr),
-            );
+        } else if let Some(kv) = p.leases.get(&y) {
+          if kv.hwaddr == self.chaddr {
+            if c.debug {
+              println!(
+                "Received DHCPREQUEST for {} from {}, re-issuing. ACKing...",
+                y,
+                format_mac(&self.chaddr),
+              );
+            }
+            offer_value = DhcpMessageType::DHCPACK.into();
+            p.update_lease(self.chaddr.clone(), SystemTime::now());
           }
-          offer_value = DhcpMessageType::DHCPACK.into();
-          p.update_lease(self.chaddr.clone(), SystemTime::now());
         } else {
           // no IP for you
           if c.debug {
@@ -538,7 +534,7 @@ impl DhcpMessage {
               None => {
                 // client isn't requesting one specifically here, let's generate one and give it to em
                 let mut found: bool = false;
-                for l in p.leases.iter_mut() {
+                for (k, l) in p.leases.iter_mut() {
                   if l.hwaddr == chaddr {
                     // a lease already exists
                     match l.lease_status() {
