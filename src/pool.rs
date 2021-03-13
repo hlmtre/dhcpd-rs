@@ -3,7 +3,7 @@ use std::{collections::HashMap, net::Ipv4Addr, time::Duration, time::SystemTime}
 #[derive(Debug, Clone)]
 pub struct Pool {
   range: Vec<Ipv4Addr>,
-  pub(crate) leases: HashMap<Ipv4Addr, Lease>,
+  pub(crate) leases: HashMap<LeaseUnique, Lease>,
   exclusions: Vec<Ipv4Addr>,
   reservations: Vec<Lease>,
 }
@@ -29,6 +29,12 @@ pub enum PoolError {
   PoolExhausted,
   RequestedAddressOutOfRange,
   RequestedAddressAlreadyAssigned,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct LeaseUnique {
+  pub(crate) ip: Ipv4Addr,
+  pub(crate) hwaddr: Box<Vec<u8>>,
 }
 
 impl PartialEq for Lease {
@@ -69,12 +75,12 @@ impl Pool {
   }
 
   pub(crate) fn prune_leases(&mut self) {
-    let mut expired_leases: Vec<Ipv4Addr> = Vec::new();
+    let mut expired_leases: Vec<LeaseUnique> = Vec::new();
     for (k, l) in &self.leases {
       match l.lease_status() {
         LeaseStatus::Fresh => {}
         LeaseStatus::Expired => {
-          expired_leases.push(*k);
+          expired_leases.push(k.clone());
         }
         LeaseStatus::Decaying => {}
       }
@@ -103,11 +109,15 @@ impl Pool {
     let lease_timestamp = SystemTime::now();
     let l: Lease = Lease {
       ip,
-      hwaddr,
+      hwaddr: hwaddr.clone(),
       lease_timestamp,
       lease_len,
     };
-    self.leases.insert(ip, l.clone());
+    let k: LeaseUnique = LeaseUnique {
+      ip,
+      hwaddr: Box::new(hwaddr),
+    };
+    self.leases.insert(k, l.clone());
     Ok(l)
   }
 
@@ -126,8 +136,12 @@ impl Pool {
     });
   }
 
-  pub(crate) fn delete_lease(&mut self, a: Ipv4Addr) -> Result<(), PoolError> {
-    match self.leases.remove(&a) {
+  pub(crate) fn delete_lease(&mut self, ip: Ipv4Addr, hwaddr: Vec<u8>) -> Result<(), PoolError> {
+    let lu = LeaseUnique {
+      ip,
+      hwaddr: Box::new(hwaddr),
+    };
+    match self.leases.remove(&lu) {
       Some(_) => return Ok(()),
       None => return Err(PoolError::RequestedAddressOutOfRange),
     }

@@ -136,8 +136,8 @@ fn main() -> std::io::Result<()> {
   extended into the 'file' and 'sname' fields.
 
   creates an array of length 576 u8s and pre-sets each to 0
+  this is equivalent to vec![0, 576];
   */
-  //this is equivalent to vec![0, 576];
   let mut buf = [0 as u8; 576];
   loop {
     match socket.recv_from(&mut buf) {
@@ -145,14 +145,6 @@ fn main() -> std::io::Result<()> {
         let mut d: DhcpMessage = DhcpMessage::default();
         let filled_buf: &mut [u8] = &mut buf[..l];
         d.parse(filled_buf);
-        /*
-        println!(
-          "{:?} {:?} from {}",
-          std::time::SystemTime::now(),
-          d.options.get("MESSAGETYPE").unwrap(),
-          d
-        );
-        */
         // if the dest address is us or broadcast
         let _f = d.options.get(&SERVER_IDENTIFIER);
         match _f {
@@ -191,9 +183,7 @@ fn main() -> std::io::Result<()> {
         //let _ = socket.set_reuse_address(true);
         let n = socket.send_to(&x, &SocketAddrV4::new(target, 68).into());
         match n {
-          Ok(num_bytes) => {
-            println!("sent {} bytes", num_bytes);
-          }
+          Ok(_) => {}
           Err(e) => {
             println!("error sending on socket {:?}. error: {}", socket, e);
           }
@@ -201,13 +191,6 @@ fn main() -> std::io::Result<()> {
       }
       Err(_) => {}
     }
-    /*
-    let mut b = String::new();
-    std::io::Read::read_to_string(&mut std::io::stdin(), &mut b)?;
-    if b == "l" {
-      println!("Leases: {:?}", p.leases);
-    }
-    */
     std::thread::sleep(std::time::Duration::from_millis(10));
   }
   #[allow(unreachable_code)]

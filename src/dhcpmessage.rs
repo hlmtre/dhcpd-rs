@@ -6,7 +6,7 @@ use std::{fmt, net::IpAddr};
 use crate::{
   config::Config,
   options::{byte_serialize::BEByteSerializable, *},
-  pool::{Lease, LeaseStatus, Pool},
+  pool::{LeaseStatus, LeaseUnique, Pool},
 };
 
 /*
@@ -404,14 +404,16 @@ impl DhcpMessage {
         if p.available(y) {
           if c.debug {
             println!(
-              "Received DHCPREQUEST for {} from {}, issuing lease for {}. ACKing...",
+              "Received DHCPREQUEST for {} from {}, issuing lease. ACKing...",
               y,
-              format_mac(&self.chaddr),
               format_mac(&self.chaddr),
             );
             offer_value = DhcpMessageType::DHCPACK.into();
           }
-        } else if let Some(kv) = p.leases.get(&y) {
+        } else if let Some(kv) = p.leases.get(&LeaseUnique {
+          ip: y.clone(),
+          hwaddr: Box::new(self.chaddr.clone()),
+        }) {
           if kv.hwaddr == self.chaddr {
             if c.debug {
               println!(
@@ -471,6 +473,15 @@ impl DhcpMessage {
               response.push(*o);
             });
           });
+        }
+        DOMAIN_NAME => {
+          if c.domain.len() > 0 {
+            {
+              response.push(DOMAIN_NAME);
+              response.push(c.domain.chars().count().try_into().unwrap());
+              response.append(&mut c.domain.as_bytes().to_vec());
+            }
+          }
         }
         _ => {}
       }
@@ -534,7 +545,7 @@ impl DhcpMessage {
               None => {
                 // client isn't requesting one specifically here, let's generate one and give it to em
                 let mut found: bool = false;
-                for (k, l) in p.leases.iter_mut() {
+                for (_k, l) in p.leases.iter_mut() {
                   if l.hwaddr == chaddr {
                     // a lease already exists
                     match l.lease_status() {
