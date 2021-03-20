@@ -25,6 +25,10 @@ fn main() -> std::io::Result<()> {
   let args: Vec<String> = env::args().collect();
   // so we can get the next arg AFTER our flag
   let mut counter: usize = 0;
+  if args.len() < 2 {
+    help();
+    std::process::exit(1);
+  }
   for e in &args {
     match e.as_str() {
       "--address" | "-a" => {

@@ -98,9 +98,12 @@ pub(crate) enum DhcpOption {
   Hostname(String),
   Router(Vec<Ipv4Addr>),
   DomainNameServer(Vec<Ipv4Addr>),
+  #[allow(dead_code)]
   IpAddressLeaseTime(u32),
   SubnetMask(Ipv4Addr),
+  #[allow(dead_code)]
   Message(String),
+  #[allow(dead_code)]
   Unrecognized(RawDhcpOption),
 }
 
