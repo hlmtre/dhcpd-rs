@@ -24,16 +24,17 @@ pub(crate) struct Config {
 }
 
 fn lease_to_seconds(s: String) -> u32 {
-  let mut units = String::new();
+  let mut digits = String::new();
   for c in s.chars() {
     if c.is_digit(10) {
-      units.push(c);
+      digits.push(c);
     }
   }
-  let units_as_int = match units.parse::<u32>() {
+  let units_as_int = match digits.parse::<u32>() {
     Ok(h) => h,
     Err(_) => 12,
   };
+  // get the last char to check our units
   match s.clone().pop() {
     Some(c) => match c {
       'h' => {
