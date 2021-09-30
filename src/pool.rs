@@ -129,7 +129,7 @@ impl Pool {
   }
 
   pub(crate) fn update_lease(&mut self, hwaddr: Vec<u8>, lt: SystemTime) {
-    self.leases.iter_mut().for_each(|(l, k)| {
+    self.leases.iter_mut().for_each(|(_, k)| {
       if k.hwaddr == hwaddr {
         k.update_lease(lt);
       }
@@ -147,17 +147,17 @@ impl Pool {
     }
   }
 
-  pub(crate) fn ip_for_mac(&self, mac: Vec<u8>) -> Result<Ipv4Addr, PoolError> {
-    for (k, l) in self.leases.iter() {
+  pub(crate) fn ip_for_mac(&self, mac: Vec<u8>) -> Result<&Ipv4Addr, PoolError> {
+    for (_, l) in self.leases.iter() {
       if l.hwaddr == mac {
-        return Ok(l.ip.clone());
+        return Ok(&l.ip);
       }
     }
     return Err(PoolError::RequestedAddressAlreadyAssigned);
   }
 
   pub(crate) fn valid_lease(&self, a: Ipv4Addr) -> bool {
-    for (k, l) in self.leases.iter() {
+    for l in self.leases.values() {
       if l.ip == a {
         if l.lease_status() != LeaseStatus::Expired {
           return true;

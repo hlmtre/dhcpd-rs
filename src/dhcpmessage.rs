@@ -376,7 +376,7 @@ impl DhcpMessage {
           offer_value = DhcpMessageType::DHCPOFFER.into();
           y = match p.ip_for_mac(self.chaddr.clone()) {
             // did we already give out an IP to this mac?
-            Ok(m) => m,
+            Ok(m) => *m,
             Err(e) => {
               println!("{:?}", e);
               let l = p.allocate_address(self.chaddr.clone(), c.lease_time);
@@ -510,7 +510,7 @@ impl DhcpMessage {
         }
       }
     }
-    &p.prune_leases();
+    p.prune_leases();
     return response;
   }
 
