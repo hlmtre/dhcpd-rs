@@ -370,7 +370,7 @@ impl DhcpMessage {
             _ => y,
           };
         }
-        if !y.is_unspecified() && p.available(y, &c.interface) {
+        if !y.is_unspecified() && p.available(y) {
           offer_value = DhcpMessageType::DHCPOFFER.into();
         } else {
           offer_value = DhcpMessageType::DHCPOFFER.into();
@@ -404,7 +404,7 @@ impl DhcpMessage {
           _ => Ipv4Addr::from(self.ciaddr),
         };
         // if it's available or this client had it before...
-        if p.available(y, &c.interface) {
+        if p.available(y) {
           if c.debug {
             println!(
               "Received DHCPREQUEST for {} from {}, issuing lease. ACKing...",
@@ -435,7 +435,7 @@ impl DhcpMessage {
               "Received DHCPREQUEST for {} from {}, available?: {}. NAKed.",
               y,
               format_mac(&self.chaddr),
-              p.available(y, &c.interface)
+              p.available(y)
             );
           }
           offer_value = DhcpMessageType::DHCPNAK.into();

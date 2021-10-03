@@ -107,6 +107,10 @@ impl Pool {
         return Err(PoolError::PoolExhausted);
       }
     };
+    if reachable(ip) {
+      println!("requested address {} already assigned!", ip);
+      return Err(PoolError::RequestedAddressAlreadyAssigned);
+    }
     let lease_timestamp = SystemTime::now();
     let l: Lease = Lease {
       ip,
@@ -122,8 +126,8 @@ impl Pool {
     Ok(l)
   }
 
-  pub(crate) fn available(&self, i: Ipv4Addr, iface: &String) -> bool {
-    if self.range.contains(&i) && !reachable(iface, i) {
+  pub(crate) fn available(&self, i: Ipv4Addr) -> bool {
+    if self.range.contains(&i) && !reachable(i) {
       return true;
     }
     false
