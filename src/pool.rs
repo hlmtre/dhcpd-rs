@@ -1,3 +1,4 @@
+use crate::ping::reachable;
 use std::{collections::HashMap, net::Ipv4Addr, time::Duration, time::SystemTime};
 
 #[derive(Debug, Clone)]
@@ -121,8 +122,8 @@ impl Pool {
     Ok(l)
   }
 
-  pub(crate) fn available(&self, i: Ipv4Addr) -> bool {
-    if self.range.contains(&i) {
+  pub(crate) fn available(&self, i: Ipv4Addr, iface: &String) -> bool {
+    if self.range.contains(&i) && !reachable(iface, i) {
       return true;
     }
     false
