@@ -36,7 +36,7 @@ fn main() -> Result<(), ArgumentError> {
     Ok(a) => a,
     _ => panic!("couldn't create socket :("),
   };
-  if !c.interface.clone().is_empty() {
+  if !c.interface.is_empty() {
     socket
       .bind_device(Some(&CString::new(c.interface.clone()).unwrap()))
       .unwrap_or_else(|_| panic!("couldn't bind to {}", c.interface));
