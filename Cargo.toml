@@ -8,5 +8,6 @@ edition = "2018"
 
 [dependencies]
 socket2 = { version = "0.3", features = ["reuseport"] }
+#futures = "0.3"
 #fastping-rs = "0.2"
 #rawsock = "0.3"
