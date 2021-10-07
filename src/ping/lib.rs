@@ -1,4 +1,4 @@
-use socket2::SockAddr;
+use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use std::{ffi::CString, net::Ipv4Addr};
 
 // TODO:
@@ -24,6 +24,90 @@ const SECOND_ICMP_PACKET: [u8; 84] = [
 ];
 */
 
+#[derive(Debug)]
+struct Ipv4IcmpPacket {
+  version: u8, // really a nibble - most significant half of first byte
+  ihl: u8,     // really a nibble - second half of first byte
+  src_address: Ipv4Addr,
+  dst_address: Ipv4Addr,
+  ttl: u8,
+  protocol: u8,
+  ipv4_checksum: u16,
+  icmp_type: u8,
+  icmp_code: u8,
+  icmp_checksum: u16,
+  identifier: u16,
+  sequence_number: u16,
+}
+
+impl Ipv4IcmpPacket {
+  // TODO
+  // write more helper functions to tease out the data from each byte in the packet
+  pub fn new(buf: &[u8]) -> Ipv4IcmpPacket {
+    let (v, l) = Ipv4IcmpPacket::get_version_ihl(buf[Ipv4DataIndex::IpType_HeaderLen as usize]);
+    Ipv4IcmpPacket {
+      version: v,
+      ihl: l,
+      src_address: Ipv4Addr::from(vec_as_u8_array(Ipv4IcmpPacket::retrieve_bytes(
+        buf,
+        4,
+        Ipv4DataIndex::SrcAddress as usize,
+      ))),
+      dst_address: Ipv4Addr::from(vec_as_u8_array(Ipv4IcmpPacket::retrieve_bytes(
+        buf,
+        4,
+        Ipv4DataIndex::DstAddress as usize,
+      ))),
+      ttl: 0,
+      protocol: 1,
+      ipv4_checksum: 0,
+      icmp_type: 0,
+      icmp_code: 8,
+      icmp_checksum: 0,
+      identifier: 0,
+      sequence_number: 0,
+    }
+  }
+
+  #[inline(always)]
+  fn get_version_ihl(byte: u8) -> (u8, u8) {
+    let version = (byte & 0xf0) >> 4;
+    let ihl = byte & 0x0f;
+    (version, ihl)
+  }
+
+  fn retrieve_bytes(target_arr: &[u8], num_bytes: usize, index: usize) -> Vec<u8> {
+    let mut v = Vec::new();
+    for counter in 0..num_bytes {
+      v.push(target_arr[index + counter]);
+    }
+    return v;
+  }
+}
+
+fn vec_as_u8_array(v: Vec<u8>) -> [u8; 4] {
+  let mut arr = [0u8; 4];
+  for (place, element) in arr.iter_mut().zip(v.iter()) {
+    *place = *element;
+  }
+  arr
+}
+
+// indices of the chunks of data in the packet, by byte
+enum Ipv4DataIndex {
+  IpType_HeaderLen = 0,
+  TOS = 1,
+  TotalLen = 2,
+  Identification = 4,
+  Flags_FragmentOffset = 6,
+  TTL = 8,
+  Protocol = 9,
+  HeaderChecksum = 10,
+  SrcAddress = 12,
+  DstAddress = 16,
+  Data = 20,
+}
+
 enum IcmpPacketDataIndex {
   Type = 0,
   Code = 1,
@@ -31,17 +115,8 @@ enum IcmpPacketDataIndex {
   Identifier = 4,
   SequenceNumber = 6,
 }
-/* icmp packet:
- 0                   1                   2                   3
- 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-|     Type      |     Code      |          Checksum             |
-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-|           Identifier          |        Sequence Number        |
-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-|     Data ...
-+-+-+-+-+-
 
+/*
 internet datagram header:
  0                   1                   2                   3
  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -56,54 +131,50 @@ internet datagram header:
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 |                    Destination Address                        |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-|                    Options                    |    Padding    |
+| ICMP packet goes in here                                      |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *
+
+icmp packet:
+ 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|     Type      |     Code      |          Checksum             |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|           Identifier          |        Sequence Number        |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|     Data ...
++-+-+-+-+-
+
 
 tcpdump:
 
 11:19:24.169673 IP 192.168.122.149 > 192.168.122.1: ICMP echo request, id 27041, seq 1, length 64
+                                               [192][168][122][149]
+         total len -> |--| |--| < ident         c0   a8   7a    95
         0x0000:  4500 0054 e338 4000 4001 e188 c0a8 7a95  E..T.8@.@.....z.
+                   ^^
+                   \|__ type of service
+              echo request ||__ code |--| ip checksum
         0x0010:  c0a8 7a01 0800 d263 69a1 0001 a5a2 5861  ..z....ci.....Xa
         0x0020:  0000 0000 f622 0900 0000 0000 1011 1213  ....."..........
         0x0030:  1415 1617 1819 1a1b 1c1d 1e1f 2021 2223  .............!"#
         0x0040:  2425 2627 2829 2a2b 2c2d 2e2f 3031 3233  $%&'()*+,-./0123
         0x0050:  3435 3637                                4567
 11:19:24.169762 IP 192.168.122.1 > 192.168.122.149: ICMP echo reply, id 27041, seq 1, length 64
-        0x0000:  4500 0054 d187 0000 4001 333a c0a8 7a01  E..T....@.3:..z.
-        0x0010:  c0a8 7a95 0000 da63 69a1 0001 a5a2 5861  ..z....ci.....Xa
-        0x0020:  0000 0000 f622 0900 0000 0000 1011 1213  ....."..........
-        0x0030:  1415 1617 1819 1a1b 1c1d 1e1f 2021 2223  .............!"#
-        0x0040:  2425 2627 2829 2a2b 2c2d 2e2f 3031 3233  $%&'()*+,-./0123
-        0x0050:  3435 3637                                4567
+                 0  1  2  3  4  5  6  7  8  9  10 11 12 13 14 15
+        0x0000:  45 00 00 54 d1 87 00 00 40 01 33 3a c0 a8 7a 01  E..T....@.3:..z.
+        0x0010:  c0a8 7a95 0000 da63 69a1 0001 a5a2 5861          ..z....ci.....Xa
+        0x0020:  0000 0000 f622 0900 0000 0000 1011 1213          ....."..........
+        0x0030:  1415 1617 1819 1a1b 1c1d 1e1f 2021 2223          .............!"#
+        0x0040:  2425 2627 2829 2a2b 2c2d 2e2f 3031 3233          $%&'()*+,-./0123
+        0x0050:  3435 3637                                        4567
 */
 
-// indices of the chunks of data in the packet, by byte
-enum DataIndex {
-  IpType_HeaderLen = 0,
-  TOS = 1,
-  TotalLen = 3,
-  Identification = 5,
-  Flags_FragmentOffset = 7,
-  TTL = 9,
-  Protocol = 10,
-  HeaderChecksum = 11,
-  SrcAddress = 13,
-  DstAddress = 17,
-  Options = 21,
-}
-
-fn replace_region(target_arr: &mut Vec<u8>, src_arr: &[u8], index: usize) {
-  for counter in 0..src_arr.len() {
-    target_arr[index + counter] = src_arr[counter];
-  }
-}
-
-// TODO i think calculate the icmp checksum
-#[allow(dead_code)]
-fn icmp_checksum(packet: &mut [u8]) -> Vec<u8> {
-  let mut v = Vec::new();
-  v.push(0x01);
-  return v;
+// this is, in this case, only ever going to be 1
+// https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers
+fn get_protocol(p: &[u8]) -> u8 {
+  return p[Ipv4DataIndex::Protocol as usize];
 }
 
 // Checksum algorithms:
@@ -114,7 +185,7 @@ fn checksum(data: &[u8], skipword: usize) -> u16 {
   finalize_checksum(sum_be_words(data, skipword))
 }
 
-/// Finalises a checksum by making sure its 16 bits, then returning it's 1's compliment
+/// Finalises a checksum by making sure it's 16 bits, then returning its 1's compliment
 #[inline]
 fn finalize_checksum(mut cs: u32) -> u16 {
   while cs >> 16 != 0 {
@@ -148,34 +219,27 @@ fn sum_be_words(d: &[u8], mut skipword: usize) -> u32 {
   sum
 }
 
-pub fn reachable(dst: Ipv4Addr) -> bool {
-  /*
-  let ping = icmp::IcmpSocket::connect(std::net::IpAddr::V4(dst));
-  let mut ping = ping.unwrap();
-  let payload: &[u8] = &[1, 2];
-  let result = ping.send(payload);
-  println!("{:#?}", result);
-  let mut response = [0_u8; 200];
-  loop {
-    let response_len = ping.recv(&mut response).unwrap();
-    let first_bytes = response[DataIndex::IpType_HeaderLen as usize];
-    println!("originally: {:#04x}", first_bytes);
-    let right = first_bytes & 0xf;
-    println!(
-      "Received {} bytes. Header len: {:#04x?} bytes.",
-      response_len, right
-    );
-    println!(
-      "{:#04x?}",
-      &response[right as usize..response_len - right as usize]
-    );
+#[inline(always)]
+fn replace_region(target_arr: &mut Vec<u8>, src_arr: &[u8], index: usize) {
+  for counter in 0..src_arr.len() {
+    target_arr[index + counter] = src_arr[counter];
   }
-  return true;
-  */
+}
 
+#[inline(always)]
+fn print_packet(p: Vec<u8>) {
+  for (counter, elem) in p.iter().enumerate() {
+    if counter % 8 == 0 {
+      println!();
+    }
+    print!("{:#04x} ", elem);
+  }
+  println!();
+}
+
+pub fn reachable(dst: Ipv4Addr) -> bool {
   let mut recv_buf = [0_u8; 84];
 
-  use socket2::{Domain, Protocol, Socket, Type};
   let listener = Socket::new(Domain::ipv4(), Type::raw(), Some(Protocol::icmpv4())).unwrap();
   listener
     .bind_device(Some(&CString::new("ens19").unwrap()))
@@ -187,11 +251,29 @@ pub fn reachable(dst: Ipv4Addr) -> bool {
     .unwrap_or_else(|_| panic!("couldn't bind to {}", "ens19"));
 
   let our_icmp_packet = ICMP_PACKET.clone();
+
+  let i: Ipv4IcmpPacket = Ipv4IcmpPacket::new(&our_icmp_packet);
+  println!("{:#?}", i);
+  return false;
+
+  println!("Before:");
+  print_packet(our_icmp_packet.to_vec());
   replace_region(
     &mut our_icmp_packet.to_vec(),
     &dst.octets(),
-    DataIndex::DstAddress as usize,
+    Ipv4DataIndex::DstAddress as usize,
   );
+  let cksum = checksum(&our_icmp_packet, IcmpPacketDataIndex::Checksum as usize);
+  println!("checksum: {:#04x}", cksum);
+  replace_region(
+    &mut our_icmp_packet.to_vec(),
+    &checksum(&our_icmp_packet, IcmpPacketDataIndex::Checksum as usize).to_be_bytes(),
+    IcmpPacketDataIndex::Checksum as usize,
+  );
+  println!("After:");
+  print_packet(our_icmp_packet.to_vec());
+
+  println!("Protocol: {:#?}", get_protocol(&our_icmp_packet));
 
   let _ = sender.set_reuse_port(true);
   let _ = sender.set_nonblocking(true);
@@ -200,7 +282,7 @@ pub fn reachable(dst: Ipv4Addr) -> bool {
     .send_to(&our_icmp_packet, &SockAddr::from(saddr))
     .unwrap();
   println!("Successfully sent {} bytes", b);
-  println!("Sent {:#04x?}", our_icmp_packet);
+  print_packet(our_icmp_packet.to_vec());
 
   let _ = listener.set_read_timeout(Some(core::time::Duration::new(2, 0)));
   let resp = listener.recv(&mut recv_buf);
