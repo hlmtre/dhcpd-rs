@@ -83,9 +83,17 @@ impl Ipv4IcmpPacket {
     }
     return v;
   }
+  // this is, in this case, only ever going to be 1
+  // https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers
+  fn get_protocol(&self) -> u8 {
+    return self.protocol;
+  }
 }
 
 fn vec_as_u8_array(v: Vec<u8>) -> [u8; 4] {
+  if v.len() > 4 {
+    return [0x0, 0x0, 0x0, 0x0];
+  }
   let mut arr = [0u8; 4];
   for (place, element) in arr.iter_mut().zip(v.iter()) {
     *place = *element;
@@ -171,12 +179,6 @@ tcpdump:
         0x0050:  3435 3637                                        4567
 */
 
-// this is, in this case, only ever going to be 1
-// https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers
-fn get_protocol(p: &[u8]) -> u8 {
-  return p[Ipv4DataIndex::Protocol as usize];
-}
-
 // Checksum algorithms:
 
 /// Calculates a checksum. Used by ipv4 and icmp. The two bytes starting at `skipword * 2` will be
@@ -220,7 +222,7 @@ fn sum_be_words(d: &[u8], mut skipword: usize) -> u32 {
 }
 
 #[inline(always)]
-fn replace_region(target_arr: &mut Vec<u8>, src_arr: &[u8], index: usize) {
+fn replace_region(target_arr: &mut [u8], src_arr: &[u8], index: usize) {
   for counter in 0..src_arr.len() {
     target_arr[index + counter] = src_arr[counter];
   }
@@ -237,32 +239,39 @@ fn print_packet(p: Vec<u8>) {
   println!();
 }
 
-pub fn reachable(dst: Ipv4Addr) -> bool {
+pub fn reachable(src_addr: Ipv4Addr, iface: &str, dst: Ipv4Addr) -> bool {
   let mut recv_buf = [0_u8; 84];
 
   let listener = Socket::new(Domain::ipv4(), Type::raw(), Some(Protocol::icmpv4())).unwrap();
   listener
-    .bind_device(Some(&CString::new("ens19").unwrap()))
-    .unwrap_or_else(|_| panic!("couldn't bind to {}", "ens19"));
+    .bind_device(Some(&CString::new(iface).unwrap()))
+    .unwrap_or_else(|_| panic!("couldn't bind to {}", iface));
 
   let sender = Socket::new(Domain::ipv4(), Type::raw(), Some(Protocol::icmpv4())).unwrap();
   sender
-    .bind_device(Some(&CString::new("ens19").unwrap()))
-    .unwrap_or_else(|_| panic!("couldn't bind to {}", "ens19"));
+    .bind_device(Some(&CString::new(iface).unwrap()))
+    .unwrap_or_else(|_| panic!("couldn't bind to {}", iface));
 
-  let our_icmp_packet = ICMP_PACKET.clone();
-
-  let i: Ipv4IcmpPacket = Ipv4IcmpPacket::new(&our_icmp_packet);
-  println!("{:#?}", i);
-  return false;
+  let mut our_icmp_packet = ICMP_PACKET.clone();
 
   println!("Before:");
   print_packet(our_icmp_packet.to_vec());
   replace_region(
-    &mut our_icmp_packet.to_vec(),
+    &mut our_icmp_packet,
     &dst.octets(),
     Ipv4DataIndex::DstAddress as usize,
   );
+  replace_region(
+    &mut our_icmp_packet,
+    &dst.octets(),
+    Ipv4DataIndex::DstAddress as usize,
+  );
+
+  let i: Ipv4IcmpPacket = Ipv4IcmpPacket::new(&our_icmp_packet);
+  println!("{:#?}", i);
+  println!("local addr: {:#?}", src_addr);
+  return false;
+
   let cksum = checksum(&our_icmp_packet, IcmpPacketDataIndex::Checksum as usize);
   println!("checksum: {:#04x}", cksum);
   replace_region(
@@ -272,8 +281,6 @@ pub fn reachable(dst: Ipv4Addr) -> bool {
   );
   println!("After:");
   print_packet(our_icmp_packet.to_vec());
-
-  println!("Protocol: {:#?}", get_protocol(&our_icmp_packet));
 
   let _ = sender.set_reuse_port(true);
   let _ = sender.set_nonblocking(true);

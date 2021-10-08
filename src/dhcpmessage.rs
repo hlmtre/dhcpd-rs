@@ -370,7 +370,7 @@ impl DhcpMessage {
             _ => y,
           };
         }
-        if !y.is_unspecified() && p.available(y) {
+        if !y.is_unspecified() {
           offer_value = DhcpMessageType::DHCPOFFER.into();
         } else {
           offer_value = DhcpMessageType::DHCPOFFER.into();
@@ -379,7 +379,12 @@ impl DhcpMessage {
             Ok(m) => *m,
             Err(e) => {
               println!("{:?}", e);
-              let l = p.allocate_address(self.chaddr.clone(), c.lease_time);
+              let a = match c.bind_address.ip() {
+                IpAddr::V4(i) => i,
+                IpAddr::V6(_) => Ipv4Addr::UNSPECIFIED,
+              };
+              let l =
+                p.allocate_address(self.chaddr.clone(), c.lease_time, c.interface.as_str(), a);
               match l {
                 Ok(x) => x.ip,
                 Err(_) => {
@@ -403,8 +408,12 @@ impl DhcpMessage {
           },
           _ => Ipv4Addr::from(self.ciaddr),
         };
+        let a = match c.bind_address.ip() {
+          IpAddr::V4(i) => i,
+          IpAddr::V6(_) => Ipv4Addr::UNSPECIFIED,
+        };
         // if it's available or this client had it before...
-        if p.available(y) {
+        if p.available(a, y, c.interface.as_str()) {
           if c.debug {
             println!(
               "Received DHCPREQUEST for {} from {}, issuing lease. ACKing...",
@@ -435,7 +444,7 @@ impl DhcpMessage {
               "Received DHCPREQUEST for {} from {}, available?: {}. NAKed.",
               y,
               format_mac(&self.chaddr),
-              p.available(y)
+              p.available(a, y, c.interface.as_str())
             );
           }
           offer_value = DhcpMessageType::DHCPNAK.into();
@@ -579,15 +588,21 @@ impl DhcpMessage {
                   }
                 }
                 if !found {
-                  yiaddr = match p.allocate_address(chaddr.clone(), c.lease_time) {
-                    Ok(l) => l.ip.octets(),
-                    Err(e) => {
-                      if c.debug {
-                        println!("Error allocating address: {:?}", e);
-                      }
-                      [0, 0, 0, 0]
-                    }
+                  let a = match c.bind_address.ip() {
+                    IpAddr::V4(i) => i,
+                    IpAddr::V6(_) => Ipv4Addr::UNSPECIFIED,
                   };
+                  yiaddr =
+                    match p.allocate_address(chaddr.clone(), c.lease_time, c.interface.as_str(), a)
+                    {
+                      Ok(l) => l.ip.octets(),
+                      Err(e) => {
+                        if c.debug {
+                          println!("Error allocating address: {:?}", e);
+                        }
+                        [0, 0, 0, 0]
+                      }
+                    };
                   if c.debug {
                     println!(
                       "new address requested for {}; issuing new lease to {}",

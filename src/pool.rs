@@ -96,6 +96,8 @@ impl Pool {
     &mut self,
     hwaddr: Vec<u8>,
     lease_len: u32,
+    iface: &str,
+    src_addr: Ipv4Addr,
   ) -> Result<Lease, PoolError> {
     if self.range.len() < 1 {
       return Err(PoolError::PoolExhausted);
@@ -107,7 +109,7 @@ impl Pool {
         return Err(PoolError::PoolExhausted);
       }
     };
-    if reachable(ip) {
+    if reachable(src_addr, iface, ip) {
       println!("requested address {} already assigned!", ip);
       return Err(PoolError::RequestedAddressAlreadyAssigned);
     }
@@ -126,8 +128,8 @@ impl Pool {
     Ok(l)
   }
 
-  pub(crate) fn available(&self, i: Ipv4Addr) -> bool {
-    if self.range.contains(&i) && !reachable(i) {
+  pub(crate) fn available(&self, src_addr: Ipv4Addr, i: Ipv4Addr, iface: &str) -> bool {
+    if self.range.contains(&i) && !reachable(src_addr, iface, i) {
       return true;
     }
     false
