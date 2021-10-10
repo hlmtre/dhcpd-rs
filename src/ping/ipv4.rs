@@ -1,27 +1,54 @@
 use crate::ping::replace_region;
 use crate::ping::IcmpPacketDataIndex;
+use std::fmt;
 use std::net::Ipv4Addr;
 
 #[derive(Debug)]
 pub struct Ipv4IcmpPacket {
-  version: u8, // really a nibble - most significant half of first byte
-  ihl: u8,     // really a nibble - second half of first byte
-  src_address: Ipv4Addr,
-  dst_address: Ipv4Addr,
-  ttl: u8,
-  protocol: u8,
-  ipv4_checksum: u16,
-  icmp_type: u8,
-  icmp_code: u8,
-  icmp_checksum: u16,
-  identifier: u16,
-  sequence_number: u16,
-  raw_rep: Vec<u8>,
+  pub version: u8, // really a nibble - most significant half of first byte
+  pub ihl: u8,     // really a nibble - second half of first byte
+  pub src_address: Ipv4Addr,
+  pub dst_address: Ipv4Addr,
+  pub ttl: u8,
+  pub protocol: u8,
+  pub ipv4_checksum: u16,
+  pub icmp_type: u8,
+  pub icmp_code: u8,
+  pub icmp_checksum: u16,
+  pub identifier: u16,
+  pub sequence_number: u16,
+  pub raw_rep: Vec<u8>,
+}
+
+impl fmt::Display for Ipv4IcmpPacket {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    write!(
+      f,
+      "
+      Ipv4IcmpPacket
+      ===============
+       version       {}
+       header len    {}
+       src address   {}
+       dst address   {}
+       ttl           {}
+       protocol      {}
+       ipv4 checksum {}
+       raw representation
+         {:x?}",
+      self.version,
+      self.ihl,
+      self.src_address,
+      self.dst_address,
+      self.ttl,
+      self.protocol,
+      self.ipv4_checksum,
+      self.raw_rep
+    )
+  }
 }
 
 impl Ipv4IcmpPacket {
-  // TODO
-  // write more helper functions to tease out the data from each byte in the packet
   pub fn new(buf: &[u8]) -> Ipv4IcmpPacket {
     let (v, l) = Ipv4IcmpPacket::get_version_ihl(buf[Ipv4DataIndex::IpType_HeaderLen as usize]);
     let mut raw = Vec::new();

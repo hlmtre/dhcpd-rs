@@ -1,6 +1,8 @@
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use std::{
+  convert::TryInto,
   ffi::CString,
+  fmt,
   net::{Ipv4Addr, SocketAddrV4},
 };
 
@@ -66,6 +68,24 @@ enum IcmpCode {
   NetworkAdministrativelyProhibited = 9,
 }
 
+impl fmt::Display for IcmpPacket {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    write!(
+      f,
+      "
+      IcmpPacket
+      ==========
+       type:       {}
+       code:       {}
+       checksum:   {}
+       seq_number: {}
+       raw representation
+         {:x?}",
+      self.r#type, self.code, self.checksum, self.seq_number, self.raw_representation
+    )
+  }
+}
+
 impl IcmpPacket {
   pub fn new(buf: &[u8]) -> IcmpPacket {
     let mut raw = Vec::new();
@@ -73,9 +93,10 @@ impl IcmpPacket {
       raw.push(*e);
     }
     IcmpPacket {
-      r#type: 0,
-      code: 0,
-      checksum: 0,
+      r#type: buf[0],
+      code: buf[1],
+      // baller. https://stackoverflow.com/a/50244328/462430
+      checksum: ((buf[2] as u16) << 8) | buf[3] as u16,
       seq_number: 0,
       raw_representation: raw,
     }
@@ -188,8 +209,9 @@ fn sum_be_words(d: &[u8], mut skipword: usize) -> u32 {
   sum
 }
 
-// replaces the region in the target array with the data in the src array
-// starting at position index and continuing til the end of src array
+/// Replaces the region in the target array with the data in the src array,
+/// starting at position index and continuing til the end of src array.
+/// Does nothing if the src array length + the index is longer than the target array.
 #[inline(always)]
 fn replace_region(target_arr: &mut [u8], src_arr: &[u8], index: usize) {
   // index + len would extend beyond the length of target_arr
@@ -214,12 +236,19 @@ fn print_packet(p: Vec<u8>) {
 }
 
 /// Check if the specified dst address is reachable from our given
-/// source address and interface
+/// source address and interface.
 /// returns: bool; false is good, basically. false means the address didn't respond
 /// to ping, and we can safely hand it out.
+///
+/// Example:
+/// ```no_run
+/// let saddr = "127.0.0.1".parse::<Ipv4Addr>().unwrap();
+/// let daddr = "8.8.8.8".parse::<Ipv4Addr>().unwrap();
+/// let i = reachable(saddr, "eth0", daddr);
+///
+/// assert_eq!(i, false);
+/// ```
 pub fn reachable(src_addr: Ipv4Addr, iface: &str, dst: Ipv4Addr) -> bool {
-  let mut recv_buf = [0_u8; 84];
-
   let listener = Socket::new(Domain::ipv4(), Type::raw(), Some(Protocol::icmpv4())).unwrap();
   listener
     .bind_device(Some(&CString::new(iface).unwrap()))
@@ -242,6 +271,7 @@ pub fn reachable(src_addr: Ipv4Addr, iface: &str, dst: Ipv4Addr) -> bool {
     IcmpPacketDataIndex::Checksum as usize,
   ));
   //println!("{:#?}", i);
+  let mut recv_buf = [0_u8; 84];
 
   let _ = sender.set_reuse_port(true);
   let _ = sender.set_nonblocking(true);
@@ -253,11 +283,15 @@ pub fn reachable(src_addr: Ipv4Addr, iface: &str, dst: Ipv4Addr) -> bool {
 
   let _ = listener.set_read_timeout(Some(core::time::Duration::new(2, 0)));
   let resp = listener.recv(&mut recv_buf);
+  // TODO
+  // check the MAC address of the responder - if it matches our original lease, re-issue it
   match resp {
     Ok(r) => {
       println!("==> Received {} bytes.", r);
-      let resp_packet = Ipv4IcmpPacket::new(&recv_buf);
-      println!("{:#04x?}", resp_packet);
+      let resp_packet = Ipv4IcmpPacket::new(&recv_buf.clone());
+      let resp_icmp = IcmpPacket::new(&recv_buf[19..84]);
+      println!("{}", resp_packet);
+      println!("{}", resp_icmp);
       return true;
     }
     Err(e) => {
