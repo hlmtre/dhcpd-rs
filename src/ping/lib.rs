@@ -1,9 +1,17 @@
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
-use std::{ffi::CString, net::Ipv4Addr};
+use std::{
+  ffi::CString,
+  net::{Ipv4Addr, SocketAddrV4},
+};
 
-// TODO:
-// this appears in tcpdump as icmp type 69 (69420l33t_topkek)
-//
+use crate::ping::ipv4::Ipv4IcmpPacket;
+
+mod ipv4;
+
+/*
+ * welp you figured out why this appears as type 69
+ * this an IPV4 AND ICMP packet.
+ * you want just from the 20th packet - appears below as the fifth 0x08 (echo request is 0x08)
 const ICMP_PACKET: [u8; 84] = [
   0x45, 0x00, 0x00, 0x00, 0xee, 0x96, 0x40, 0x00, 0x40, 0x01, 0x79, 0xf0, 0xc0, 0xa8, 0x01, 0x6a,
   0x08, 0x08, 0x08, 0x08, 0x08, 0x00, 0x2f, 0x08, 0x66, 0xc2, 0x00, 0x12, 0x82, 0xaa, 0xcc, 0x5c,
@@ -12,116 +20,75 @@ const ICMP_PACKET: [u8; 84] = [
   0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x30, 0x31, 0x32, 0x33,
   0x34, 0x35, 0x36, 0x37,
 ];
-
-/*
-const SECOND_ICMP_PACKET: [u8; 84] = [
-  0x45, 0x00, 0x00, 0x54, 0x13, 0x53, 0x40, 0x00, 0x40, 0x01, 0xb1, 0x6d, 0xc0, 0xa8, 0x7a, 0x0,
-  0xc0, 0xa8, 0x7a, 0x96, 0x08, 0x00, 0x89, 0xeb, 0xca, 0xe3, 0x00, 0x01, 0xf8, 0x06, 0x5d, 0x61,
-  0x00, 0x00, 0x00, 0x00, 0x80, 0xf4, 0x0e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x11, 0x12, 0x13,
-  0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0x21, 0x22, 0x23,
-  0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x30, 0x31, 0x32, 0x33,
-  0x34, 0x35, 0x36, 0x37,
-];
 */
 
-#[derive(Debug)]
-struct Ipv4IcmpPacket {
-  version: u8, // really a nibble - most significant half of first byte
-  ihl: u8,     // really a nibble - second half of first byte
-  src_address: Ipv4Addr,
-  dst_address: Ipv4Addr,
-  ttl: u8,
-  protocol: u8,
-  ipv4_checksum: u16,
-  icmp_type: u8,
-  icmp_code: u8,
-  icmp_checksum: u16,
-  identifier: u16,
-  sequence_number: u16,
-}
+const ICMP_PACKET: [u8; 64] = [
+  0x08, 0x00, 0xa4, 0x3c, 0x37, 0xb8, 0x00, 0x01, 0x18, 0x3a, 0x62, 0x61, 0x00, 0x00, 0x00, 0x00,
+  0xd9, 0x9b, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+  0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27,
+  0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37,
+];
 
-impl Ipv4IcmpPacket {
-  // TODO
-  // write more helper functions to tease out the data from each byte in the packet
-  pub fn new(buf: &[u8]) -> Ipv4IcmpPacket {
-    let (v, l) = Ipv4IcmpPacket::get_version_ihl(buf[Ipv4DataIndex::IpType_HeaderLen as usize]);
-    Ipv4IcmpPacket {
-      version: v,
-      ihl: l,
-      src_address: Ipv4Addr::from(vec_as_u8_array(Ipv4IcmpPacket::retrieve_bytes(
-        buf,
-        4,
-        Ipv4DataIndex::SrcAddress as usize,
-      ))),
-      dst_address: Ipv4Addr::from(vec_as_u8_array(Ipv4IcmpPacket::retrieve_bytes(
-        buf,
-        4,
-        Ipv4DataIndex::DstAddress as usize,
-      ))),
-      ttl: 0,
-      protocol: 1,
-      ipv4_checksum: 0,
-      icmp_type: 0,
-      icmp_code: 8,
-      icmp_checksum: 0,
-      identifier: 0,
-      sequence_number: 0,
-    }
-  }
-
-  #[inline(always)]
-  fn get_version_ihl(byte: u8) -> (u8, u8) {
-    let version = (byte & 0xf0) >> 4;
-    let ihl = byte & 0x0f;
-    (version, ihl)
-  }
-
-  fn retrieve_bytes(target_arr: &[u8], num_bytes: usize, index: usize) -> Vec<u8> {
-    let mut v = Vec::new();
-    for counter in 0..num_bytes {
-      v.push(target_arr[index + counter]);
-    }
-    return v;
-  }
-  // this is, in this case, only ever going to be 1
-  // https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers
-  fn get_protocol(&self) -> u8 {
-    return self.protocol;
-  }
-}
-
-fn vec_as_u8_array(v: Vec<u8>) -> [u8; 4] {
-  if v.len() > 4 {
-    return [0x0, 0x0, 0x0, 0x0];
-  }
-  let mut arr = [0u8; 4];
-  for (place, element) in arr.iter_mut().zip(v.iter()) {
-    *place = *element;
-  }
-  arr
-}
-
-// indices of the chunks of data in the packet, by byte
-enum Ipv4DataIndex {
-  IpType_HeaderLen = 0,
-  TOS = 1,
-  TotalLen = 2,
-  Identification = 4,
-  Flags_FragmentOffset = 6,
-  TTL = 8,
-  Protocol = 9,
-  HeaderChecksum = 10,
-  SrcAddress = 12,
-  DstAddress = 16,
-  Data = 20,
-}
-
+#[repr(u8)]
 enum IcmpPacketDataIndex {
   Type = 0,
   Code = 1,
   Checksum = 2,
   Identifier = 4,
   SequenceNumber = 6,
+}
+
+#[derive(Debug, Default)]
+struct IcmpPacket {
+  r#type: u8,
+  code: u8,
+  checksum: u16,
+  seq_number: u16,
+  raw_representation: Vec<u8>,
+}
+
+#[repr(u8)]
+enum IcmpType {
+  Reply = 0,
+  DestinationUnreachable = 3,
+  SourceQuence = 4,
+  RedirectMessage = 5,
+  AlternateHostAddress = 6,
+  EchoRequest = 8,
+}
+
+#[repr(u8)]
+enum IcmpCode {
+  Reply = 0,
+  DestinationHostUnreachable = 1,
+  DestinationProtocolUnreachable = 2,
+  DestinationPortUnreachabel = 3,
+  NetworkAdministrativelyProhibited = 9,
+}
+
+impl IcmpPacket {
+  pub fn new(buf: &[u8]) -> IcmpPacket {
+    let mut raw = Vec::new();
+    for e in buf {
+      raw.push(*e);
+    }
+    IcmpPacket {
+      r#type: 0,
+      code: 0,
+      checksum: 0,
+      seq_number: 0,
+      raw_representation: raw,
+    }
+  }
+
+  pub fn set_checksum(&mut self, checksum: u16) {
+    replace_region(
+      &mut self.raw_representation,
+      &checksum.to_be_bytes(),
+      IcmpPacketDataIndex::Checksum as usize,
+    );
+    self.checksum = checksum;
+  }
 }
 
 /*
@@ -179,7 +146,7 @@ tcpdump:
         0x0050:  3435 3637                                        4567
 */
 
-// Checksum algorithms:
+// Checksum algorithms
 
 /// Calculates a checksum. Used by ipv4 and icmp. The two bytes starting at `skipword * 2` will be
 /// ignored. Supposed to be the checksum field, which is regarded as zero during calculation.
@@ -221,8 +188,15 @@ fn sum_be_words(d: &[u8], mut skipword: usize) -> u32 {
   sum
 }
 
+// replaces the region in the target array with the data in the src array
+// starting at position index and continuing til the end of src array
 #[inline(always)]
 fn replace_region(target_arr: &mut [u8], src_arr: &[u8], index: usize) {
+  // index + len would extend beyond the length of target_arr
+  // just bail
+  if src_arr.len() + index > target_arr.len() {
+    return;
+  }
   for counter in 0..src_arr.len() {
     target_arr[index + counter] = src_arr[counter];
   }
@@ -239,6 +213,10 @@ fn print_packet(p: Vec<u8>) {
   println!();
 }
 
+/// Check if the specified dst address is reachable from our given
+/// source address and interface
+/// returns: bool; false is good, basically. false means the address didn't respond
+/// to ping, and we can safely hand it out.
 pub fn reachable(src_addr: Ipv4Addr, iface: &str, dst: Ipv4Addr) -> bool {
   let mut recv_buf = [0_u8; 84];
 
@@ -251,51 +229,35 @@ pub fn reachable(src_addr: Ipv4Addr, iface: &str, dst: Ipv4Addr) -> bool {
   sender
     .bind_device(Some(&CString::new(iface).unwrap()))
     .unwrap_or_else(|_| panic!("couldn't bind to {}", iface));
+  let saddr = SocketAddrV4::new(src_addr, 0);
+  sender
+    .bind(&SockAddr::from(saddr))
+    .unwrap_or_else(|_| panic!("couldn't bind to {}", saddr));
 
-  let mut our_icmp_packet = ICMP_PACKET.clone();
+  let our_icmp_packet = ICMP_PACKET.clone();
 
-  println!("Before:");
-  print_packet(our_icmp_packet.to_vec());
-  replace_region(
-    &mut our_icmp_packet,
-    &dst.octets(),
-    Ipv4DataIndex::DstAddress as usize,
-  );
-  replace_region(
-    &mut our_icmp_packet,
-    &dst.octets(),
-    Ipv4DataIndex::DstAddress as usize,
-  );
-
-  let i: Ipv4IcmpPacket = Ipv4IcmpPacket::new(&our_icmp_packet);
-  println!("{:#?}", i);
-  println!("local addr: {:#?}", src_addr);
-  return false;
-
-  let cksum = checksum(&our_icmp_packet, IcmpPacketDataIndex::Checksum as usize);
-  println!("checksum: {:#04x}", cksum);
-  replace_region(
-    &mut our_icmp_packet.to_vec(),
-    &checksum(&our_icmp_packet, IcmpPacketDataIndex::Checksum as usize).to_be_bytes(),
+  let mut i = IcmpPacket::new(&our_icmp_packet);
+  i.set_checksum(checksum(
+    &i.raw_representation,
     IcmpPacketDataIndex::Checksum as usize,
-  );
-  println!("After:");
-  print_packet(our_icmp_packet.to_vec());
+  ));
+  //println!("{:#?}", i);
 
   let _ = sender.set_reuse_port(true);
   let _ = sender.set_nonblocking(true);
-  let saddr = std::net::SocketAddrV4::new(dst, 0);
+  let dsaddr = std::net::SocketAddrV4::new(dst, 0);
   let b = sender
-    .send_to(&our_icmp_packet, &SockAddr::from(saddr))
+    .send_to(&our_icmp_packet, &SockAddr::from(dsaddr))
     .unwrap();
   println!("Successfully sent {} bytes", b);
-  print_packet(our_icmp_packet.to_vec());
 
   let _ = listener.set_read_timeout(Some(core::time::Duration::new(2, 0)));
   let resp = listener.recv(&mut recv_buf);
   match resp {
     Ok(r) => {
-      println!("{:#?}", r);
+      println!("==> Received {} bytes.", r);
+      let resp_packet = Ipv4IcmpPacket::new(&recv_buf);
+      println!("{:#04x?}", resp_packet);
       return true;
     }
     Err(e) => {
@@ -303,58 +265,4 @@ pub fn reachable(src_addr: Ipv4Addr, iface: &str, dst: Ipv4Addr) -> bool {
       return false;
     }
   }
-
-  /*
-  let (tx, rx) = std::sync::mpsc::sync_channel(84);
-  std::thread::spawn(|| {
-    if let Ok(a) = socket.recv(*recv_buf) {
-      tx.send(a);
-    }
-  });
-  loop {
-    match rx.try_recv() {
-      Ok(resp) => {
-        println!("{:#?}", resp);
-        let saddr = std::net::SocketAddrV4::new(dst, 0);
-        let b = socket
-          .send_to(&our_icmp_packet, &SockAddr::from(saddr))
-          .unwrap();
-        //println!("{:#04x?}", recv_buf);
-        println!("sent {} bytes", b);
-        return false;
-      }
-      Err(_) => return true,
-    }
-  }
-  */
-
-  /*
-  use fastping_rs::{
-    PingResult::{Idle, Receive},
-    Pinger,
-  };
-  let (pinger, results) = match Pinger::new(None, Some(56)) {
-    Ok((pinger, results)) => (pinger, results),
-    Err(e) => panic!("Error creating pinger: {}", e),
-  };
-
-  pinger.add_ipaddr(&dst.to_string());
-  pinger.ping_once();
-
-  loop {
-    match results.recv() {
-      Ok(result) => match result {
-        Idle { addr } => {
-          println!("address {} did not respond! hooray!", addr);
-          return false;
-        }
-        Receive { addr, .. } => {
-          println!("address {} did respond! awwwww", addr);
-          return true;
-        }
-      },
-      Err(_) => panic!("Worker threads disconnected before the solution was found!"),
-    }
-  }
-  */
 }
