@@ -109,7 +109,29 @@ impl Pool {
         return Err(PoolError::PoolExhausted);
       }
     };
-    if reachable(src_addr, iface, ip) {
+    let (r, mac) = reachable(src_addr, iface, ip);
+    println!("{:?}, {:?}", r, mac);
+    if r {
+      match self.leases.get_mut(&LeaseUnique {
+        ip: src_addr,
+        hwaddr: Box::new(Vec::new()),
+      }) {
+        Some(v) => {
+          println!(
+            "holy shit we found it, it's reachable, and the arp table says it's alreayd ours {:?}",
+            v
+          );
+          if v.hwaddr == mac.bytes {
+            let lease_timestamp = SystemTime::now();
+            v.update_lease(lease_timestamp);
+            return Ok(v.clone());
+          }
+        }
+        None => {
+          println!("requested address {} already assigned!", ip);
+          return Err(PoolError::RequestedAddressAlreadyAssigned);
+        }
+      }
       println!("requested address {} already assigned!", ip);
       return Err(PoolError::RequestedAddressAlreadyAssigned);
     }
@@ -129,7 +151,8 @@ impl Pool {
   }
 
   pub(crate) fn available(&self, src_addr: Ipv4Addr, i: Ipv4Addr, iface: &str) -> bool {
-    if self.range.contains(&i) && !reachable(src_addr, iface, i) {
+    let (r, mac) = reachable(src_addr, iface, i);
+    if self.range.contains(&i) && !r {
       return true;
     }
     false

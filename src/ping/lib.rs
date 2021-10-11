@@ -1,11 +1,11 @@
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use std::{
-  convert::TryInto,
   ffi::CString,
   fmt,
   net::{Ipv4Addr, SocketAddrV4},
 };
 
+use crate::arp::{self, MacAddress};
 use crate::ping::ipv4::Ipv4IcmpPacket;
 
 mod ipv4;
@@ -248,7 +248,7 @@ fn print_packet(p: Vec<u8>) {
 ///
 /// assert_eq!(i, false);
 /// ```
-pub fn reachable(src_addr: Ipv4Addr, iface: &str, dst: Ipv4Addr) -> bool {
+pub fn reachable(src_addr: Ipv4Addr, iface: &str, dst: Ipv4Addr) -> (bool, MacAddress) {
   let listener = Socket::new(Domain::ipv4(), Type::raw(), Some(Protocol::icmpv4())).unwrap();
   listener
     .bind_device(Some(&CString::new(iface).unwrap()))
@@ -270,6 +270,7 @@ pub fn reachable(src_addr: Ipv4Addr, iface: &str, dst: Ipv4Addr) -> bool {
     &i.raw_representation,
     IcmpPacketDataIndex::Checksum as usize,
   ));
+
   //println!("{:#?}", i);
   let mut recv_buf = [0_u8; 84];
 
@@ -283,8 +284,6 @@ pub fn reachable(src_addr: Ipv4Addr, iface: &str, dst: Ipv4Addr) -> bool {
 
   let _ = listener.set_read_timeout(Some(core::time::Duration::new(2, 0)));
   let resp = listener.recv(&mut recv_buf);
-  // TODO
-  // check the MAC address of the responder - if it matches our original lease, re-issue it
   match resp {
     Ok(r) => {
       println!("==> Received {} bytes.", r);
@@ -292,11 +291,17 @@ pub fn reachable(src_addr: Ipv4Addr, iface: &str, dst: Ipv4Addr) -> bool {
       let resp_icmp = IcmpPacket::new(&recv_buf[19..84]);
       println!("{}", resp_packet);
       println!("{}", resp_icmp);
-      return true;
+      let _m = arp::get_mac_for_ip(resp_packet.src_address);
+      return (true, _m);
     }
     Err(e) => {
       println!("Error: {:#?}", e);
-      return false;
+      return (
+        false,
+        MacAddress {
+          bytes: [0, 0, 0, 0, 0, 0].to_vec(),
+        },
+      );
     }
   }
 }

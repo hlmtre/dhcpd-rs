@@ -3,6 +3,8 @@
 use pool::Pool;
 use socket2::{Domain, Protocol, Socket, Type};
 
+#[path = "arp/arp.rs"]
+mod arp;
 mod config;
 mod dhcpmessage;
 mod options;
