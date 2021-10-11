@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use std::{
   ffi::CString,

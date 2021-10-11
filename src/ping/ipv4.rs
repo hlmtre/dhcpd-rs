@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::ping::replace_region;
 use crate::ping::IcmpPacketDataIndex;
 use std::fmt;

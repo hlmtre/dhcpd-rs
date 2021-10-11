@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::ping::reachable;
 use std::{collections::HashMap, net::Ipv4Addr, time::Duration, time::SystemTime};
 
@@ -166,6 +167,7 @@ impl Pool {
     });
   }
 
+  // TODO
   pub(crate) fn delete_lease(&mut self, ip: Ipv4Addr, hwaddr: Vec<u8>) -> Result<(), PoolError> {
     let lu = LeaseUnique {
       ip,

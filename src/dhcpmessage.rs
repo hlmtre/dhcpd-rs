@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::{
   collections::HashMap, convert::TryInto, fmt::Formatter, net::Ipv4Addr, time::SystemTime,
 };
@@ -722,6 +723,7 @@ impl DhcpMessage {
     0
   }
 
+  // TODO
   fn get_yiaddr(&self) -> Ipv4Addr {
     Ipv4Addr::from(self.yiaddr)
   }
