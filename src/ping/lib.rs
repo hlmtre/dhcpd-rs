@@ -220,9 +220,7 @@ fn replace_region(target_arr: &mut [u8], src_arr: &[u8], index: usize) {
   if src_arr.len() + index > target_arr.len() {
     return;
   }
-  for counter in 0..src_arr.len() {
-    target_arr[index + counter] = src_arr[counter];
-  }
+  target_arr[index..(src_arr.len() + index)].clone_from_slice(src_arr);
 }
 
 #[inline(always)]
@@ -264,7 +262,7 @@ pub fn reachable(src_addr: Ipv4Addr, iface: &str, dst: Ipv4Addr) -> (bool, MacAd
     .bind(&SockAddr::from(saddr))
     .unwrap_or_else(|_| panic!("couldn't bind to {}", saddr));
 
-  let our_icmp_packet = ICMP_PACKET.clone();
+  let our_icmp_packet = ICMP_PACKET;
 
   let mut i = IcmpPacket::new(&our_icmp_packet);
   i.set_checksum(checksum(
@@ -293,6 +291,7 @@ pub fn reachable(src_addr: Ipv4Addr, iface: &str, dst: Ipv4Addr) -> (bool, MacAd
       println!("{}", resp_packet);
       println!("{}", resp_icmp);
       let _m = arp::get_mac_for_ip(resp_packet.src_address);
+      println!("{:?}", _m);
       return (true, _m);
     }
     Err(e) => {
