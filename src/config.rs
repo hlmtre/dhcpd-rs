@@ -23,19 +23,16 @@ pub(crate) struct Config {
   pub lease_time: u32,
 }
 
-fn lease_to_seconds(s: String) -> u32 {
+fn lease_to_seconds(s: &str) -> u32 {
   let mut digits = String::new();
   for c in s.chars() {
     if c.is_digit(10) {
       digits.push(c);
     }
   }
-  let units_as_int = match digits.parse::<u32>() {
-    Ok(h) => h,
-    Err(_) => 12,
-  };
+  let units_as_int = digits.parse::<u32>().unwrap_or(12);
   // get the last char to check our units
-  match s.clone().pop() {
+  match s.chars().last() {
     Some(c) => match c {
       'h' => {
         return 60 * 60 * units_as_int;
@@ -66,11 +63,11 @@ impl Config {
       dhcp_range: Vec::new(),
       dns_servers: Vec::new(),
       domain: "some.fake.lan".to_string(),
-      lease_time: lease_to_seconds("12h".to_string()),
+      lease_time: lease_to_seconds("12h"),
     }
   }
 
-  pub(crate) fn set_lease(&mut self, s: String) {
+  pub(crate) fn set_lease(&mut self, s: &str) {
     self.lease_time = lease_to_seconds(s);
   }
 }

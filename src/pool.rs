@@ -152,7 +152,7 @@ impl Pool {
   }
 
   pub(crate) fn available(&self, src_addr: Ipv4Addr, i: Ipv4Addr, iface: &str) -> bool {
-    let (r, mac) = reachable(src_addr, iface, i);
+    let (r, _mac) = reachable(src_addr, iface, i);
     if self.range.contains(&i) && !r {
       return true;
     }

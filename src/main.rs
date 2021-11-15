@@ -87,7 +87,7 @@ fn main() -> Result<(), ArgumentError> {
         Some(_g) => match _g {
           DhcpOption::ServerIdentifier(a) => {
             println!("server identifier: {:?}", _g);
-            if IpAddr::V4(a.clone()) != c.bind_address.ip() && !a.is_broadcast() {
+            if IpAddr::V4(*a) != c.bind_address.ip() && !a.is_broadcast() {
               println!("{} != {}", c.bind_address.ip(), a);
               continue;
             }
@@ -182,7 +182,7 @@ fn parse_args(args: Vec<String>) -> Result<Config, ArgumentError> {
         c.domain = args[counter + 1].clone();
       }
       "--leasetime" | "--lease" => {
-        c.set_lease(args[counter + 1].clone());
+        c.set_lease(args[counter + 1].as_str());
       }
       "--range" | "-r" => {
         let l: Vec<&str> = args[counter + 1].split(',').collect();
