@@ -21,15 +21,15 @@ pub fn get_mac_for_ip(i: Ipv4Addr) -> MacAddress {
   let mut contents = String::new();
   let _ = f.read_to_string(&mut contents);
   let mut v: Vec<u8> = Vec::new();
-  for line in contents.split("\n") {
+  for line in contents.split('\n') {
     if line.starts_with(&i.to_string()) {
-      let mut parts = line.split(" ").collect::<Vec<&str>>();
-      parts.retain(|l| l.len() > 0);
+      let mut parts = line.split(' ').collect::<Vec<&str>>();
+      parts.retain(|l| !l.is_empty());
       let a = parts[3];
       // it's always gonna be valid from /proc/net/arp
       // i mean
       // right?
-      a.split(":")
+      a.split(':')
         .for_each(|x| v.push(usize::from_str_radix(x, 16).unwrap().try_into().unwrap()));
       let m = MacAddress { bytes: v };
       return m;

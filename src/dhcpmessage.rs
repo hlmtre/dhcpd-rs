@@ -154,7 +154,7 @@ impl From<u8> for DhcpMessageType {
   }
 }
 
-pub(crate) fn format_mac(mac: &Vec<u8>) -> String {
+pub(crate) fn format_mac(mac: &[u8]) -> String {
   format!(
     "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
     mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
@@ -201,11 +201,8 @@ impl DhcpMessage {
       // this gets the next u8 byte off the array, AND increments our index by 1
       let next: Result<Vec<u8>, DhcpMessageParseError> =
         Self::take_next(&self, buf, &mut current_index, 1);
-      match next {
-        // check the first byte of the returned byte array - this tells us the dhcp option
-        // and then we just match each possible dhcp option with its length, grabbing
-        // the data and advancing to the end of it
-        Ok(n) => match n[0] {
+      if let Ok(n) = next {
+        match n[0] {
           DOMAIN_NAME_SERVER => {
             let len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
             let b = Self::take_next(&self, buf, &mut current_index, len.into()).unwrap();
@@ -266,9 +263,9 @@ impl DhcpMessage {
             let prl_len: usize =
               Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0].into();
             let mut prl_vec: Vec<u8> = Vec::new();
-            for _x in current_index..current_index + prl_len {
+            (current_index..current_index + prl_len).for_each(|_x| {
               prl_vec.push(buf[_x]);
-            }
+            });
             self.options.insert(
               PARAMETER_REQUEST_LIST,
               DhcpOption::ParameterRequestList(prl_vec),
@@ -314,8 +311,7 @@ impl DhcpMessage {
           _ => {
             break;
           }
-        },
-        Err(_) => {}
+        }
       }
     }
   }
