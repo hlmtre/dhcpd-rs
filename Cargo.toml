@@ -10,6 +10,10 @@ edition = "2018"
 name = "arp_server"
 path = "src/arp/server.rs"
 
+[[bin]]
+name = "dhcpd-rs"
+path = "src/main.rs"
+
 [dependencies]
 socket2 = { version = "0.3", features = ["reuseport"] }
 libc = "0.2"

@@ -128,6 +128,7 @@ fn handle_packet(fd: i32, mappings: &mut Mappings, sender: sockaddr_ll, packet: 
     _ => {
       // working here
       println!("No entry for IP {:?}", tpa);
+      println!("Inserted entry {:?} as {:02x?}", tpa, parsed.source_mac);
       mappings.insert(tpa, parsed.source_mac);
       return;
     }
@@ -171,7 +172,7 @@ fn send_reply(fd: i32, mut frame: RawArpFrame, mac_addr: MacAddr, raw_addr: sock
       mem::size_of_val(&sa) as u32,
     ) {
       d if d < 0 => println!("Error sending reply"),
-      _ => println!("Sent an ARP reply"),
+      _ => println!("Sent an ARP reply of {:?} to {:?}", frame, addr_ptr),
     }
   }
 }
