@@ -57,20 +57,7 @@ fn main() -> Result<(), ArgumentError> {
     }
     println!("==> listening on {}", c.listening_address);
   }
-  let binding = c.listening_address.ip();
-  let ipa = match &binding {
-    IpAddr::V4(a) => a,
-    IpAddr::V6(_) => todo!(),
-  };
-  println!(
-    "REACHABLE? {:?} ",
-    ping::reachable(
-      *ipa,
-      &c.interface,
-      "192.168.122.1".parse::<Ipv4Addr>().unwrap(),
-    )
-  );
-  std::process::exit(0);
+  //std::process::exit(0);
   /*
   The 'options' field is now variable length. A DHCP client must be
   prepared to receive DHCP messages with an 'options' field of at least

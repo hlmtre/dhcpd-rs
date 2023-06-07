@@ -100,7 +100,7 @@ impl Pool {
     iface: &str,
     src_addr: Ipv4Addr,
   ) -> Result<Lease, PoolError> {
-    if self.range.len() < 1 {
+    if self.range.is_empty() {
       return Err(PoolError::PoolExhausted);
     }
     let i = self.range.pop();
