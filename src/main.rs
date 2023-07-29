@@ -91,7 +91,10 @@ fn main() -> Result<(), ArgumentError> {
           _ => {
             println!("default: {:?}", _g);
           }
-        }, None => { println!( "no server identifier. peer address: {:?}",
+        },
+        None => {
+          println!(
+            "no server identifier. peer address: {:?}",
             socket.peer_addr()
           );
         }

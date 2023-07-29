@@ -342,7 +342,7 @@ impl DhcpMessage {
     let mut b = c.routers.clone();
     // so we can pop and get the first one specified
     b.reverse();
-    let router_option_value: [u8; 4] = b.pop().unwrap_or_else(|| Ipv4Addr::UNSPECIFIED).octets();
+    let router_option_value: [u8; 4] = b.pop().unwrap_or(Ipv4Addr::UNSPECIFIED).octets();
     let option_end: u8 = 255;
     let mut y: Ipv4Addr = Ipv4Addr::UNSPECIFIED;
     let mut message: String = String::new();
