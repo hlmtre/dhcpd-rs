@@ -63,7 +63,7 @@ jobs:
           command: clippy
           args: --
 
-    build_and_test:
+  build_and_test:
     name: Rust project
     runs-on: ubuntu-latest
     steps:
