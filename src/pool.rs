@@ -36,7 +36,7 @@ pub enum PoolError {
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct LeaseUnique {
   pub(crate) ip: Ipv4Addr,
-  pub(crate) hwaddr: Box<Vec<u8>>,
+  pub(crate) hwaddr: Vec<u8>,
 }
 
 impl PartialEq for Lease {
@@ -112,17 +112,20 @@ impl Pool {
     };
     let (r, mac) = reachable(src_addr, iface, ip);
     println!("{:?}, {:?}", r, mac);
+    println!("LEASES: {:?}", self.leases);
     if r {
+      // it's reachable by ping, but is it in our lease table?
       match self.leases.get_mut(&LeaseUnique {
         ip: src_addr,
-        hwaddr: Box::new(Vec::new()),
+        hwaddr: Vec::<u8>::default(),
       }) {
         Some(v) => {
           println!(
-            "holy shit we found it, it's reachable, and the arp table says it's alreayd ours {:?}",
+            "holy shit we found it, it's reachable, and the lease table says it's already ours {:?}",
             v
           );
           if v.hwaddr == mac.bytes {
+            // renew the lease time
             let lease_timestamp = SystemTime::now();
             v.update_lease(lease_timestamp);
             return Ok(v.clone());
@@ -143,10 +146,7 @@ impl Pool {
       lease_timestamp,
       lease_len,
     };
-    let k: LeaseUnique = LeaseUnique {
-      ip,
-      hwaddr: Box::new(hwaddr),
-    };
+    let k: LeaseUnique = LeaseUnique { ip, hwaddr };
     self.leases.insert(k, l.clone());
     Ok(l)
   }
@@ -169,10 +169,7 @@ impl Pool {
 
   // TODO
   pub(crate) fn delete_lease(&mut self, ip: Ipv4Addr, hwaddr: Vec<u8>) -> Result<(), PoolError> {
-    let lu = LeaseUnique {
-      ip,
-      hwaddr: Box::new(hwaddr),
-    };
+    let lu = LeaseUnique { ip, hwaddr };
     match self.leases.remove(&lu) {
       Some(_) => return Ok(()),
       None => return Err(PoolError::RequestedAddressOutOfRange),

@@ -213,9 +213,9 @@ impl DhcpMessage {
             }
           }
           ROUTER => {
-            let len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
-            let b = Self::take_next(&self, buf, &mut current_index, len.into()).unwrap();
-            match Self::get_ipv4_array(&self, len.into(), b) {
+            let len = Self::take_next(self, buf, &mut current_index, 1).unwrap()[0];
+            let b = Self::take_next(self, buf, &mut current_index, len.into()).unwrap();
+            match Self::get_ipv4_array(self, len.into(), b) {
               Ok(a) => {
                 self.options.insert(ROUTER, DhcpOption::Router(a));
               }
@@ -255,7 +255,7 @@ impl DhcpMessage {
           // dec55: parameter request list
           PARAMETER_REQUEST_LIST => {
             let prl_len: usize =
-              Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0].into();
+              Self::take_next(self, buf, &mut current_index, 1).unwrap()[0].into();
             let mut prl_vec: Vec<u8> = Vec::new();
             (current_index..current_index + prl_len).for_each(|_x| {
               prl_vec.push(buf[_x]);
@@ -267,18 +267,18 @@ impl DhcpMessage {
             current_index = current_index + prl_len;
           }
           SUBNET_MASK => {
-            let subnet_mask_len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
+            let subnet_mask_len = Self::take_next(self, buf, &mut current_index, 1).unwrap()[0];
             let fb =
-              Self::take_next(&self, buf, &mut current_index, subnet_mask_len.into()).unwrap();
+              Self::take_next(self, buf, &mut current_index, subnet_mask_len.into()).unwrap();
             let subnet_mask: Ipv4Addr = Ipv4Addr::new(fb[0], fb[1], fb[2], fb[3]);
             self
               .options
               .insert(SUBNET_MASK, DhcpOption::SubnetMask(subnet_mask));
           }
           REQUESTED_IP_ADDRESS => {
-            let request_len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
+            let request_len = Self::take_next(self, buf, &mut current_index, 1).unwrap()[0];
             let four_bee =
-              Self::take_next(&self, buf, &mut current_index, request_len.into()).unwrap();
+              Self::take_next(self, buf, &mut current_index, request_len.into()).unwrap();
             let i = self.get_ipv4_array(4, four_bee);
             match i {
               Ok(mut ip) => {
@@ -294,9 +294,9 @@ impl DhcpMessage {
             }
           }
           HOST_NAME => {
-            let hostname_len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
+            let hostname_len = Self::take_next(self, buf, &mut current_index, 1).unwrap()[0];
             let hostname =
-              Self::take_next(&self, buf, &mut current_index, hostname_len.into()).unwrap();
+              Self::take_next(self, buf, &mut current_index, hostname_len.into()).unwrap();
             self.options.insert(
               HOST_NAME,
               DhcpOption::Hostname(std::str::from_utf8(&hostname).unwrap().to_string()),
@@ -415,7 +415,7 @@ impl DhcpMessage {
           }
         } else if let Some(kv) = p.leases.get(&LeaseUnique {
           ip: y.clone(),
-          hwaddr: Box::new(self.chaddr.clone()),
+          hwaddr: self.chaddr.clone(),
         }) {
           if kv.hwaddr == self.chaddr {
             if c.debug {
