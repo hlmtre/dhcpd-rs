@@ -27,7 +27,7 @@ pub(crate) struct Config {
 fn lease_to_seconds(s: &str) -> u32 {
   let mut digits = String::new();
   for c in s.chars() {
-    if c.is_digit(10) {
+    if c.is_ascii_digit() {
       digits.push(c);
     }
   }

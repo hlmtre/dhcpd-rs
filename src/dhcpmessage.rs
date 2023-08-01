@@ -190,17 +190,17 @@ impl DhcpMessage {
     // then the parts that are actually DHCP, not just bootp
     // these parts are variable length, so we have to
     // get past the four-byte magic cookie to the next option
-    let mut current_index = Self::get_options_index(&self, buf) + 4;
+    let mut current_index = Self::get_options_index(self, buf) + 4;
     loop {
       // this gets the next u8 byte off the array, AND increments our index by 1
       let next: Result<Vec<u8>, DhcpMessageParseError> =
-        Self::take_next(&self, buf, &mut current_index, 1);
+        Self::take_next(self, buf, &mut current_index, 1);
       if let Ok(n) = next {
         match n[0] {
           DOMAIN_NAME_SERVER => {
-            let len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
-            let b = Self::take_next(&self, buf, &mut current_index, len.into()).unwrap();
-            match Self::get_ipv4_array(&self, len.into(), b) {
+            let len = Self::take_next(self, buf, &mut current_index, 1).unwrap()[0];
+            let b = Self::take_next(self, buf, &mut current_index, len.into()).unwrap();
+            match Self::get_ipv4_array(self, len.into(), b) {
               Ok(a) => {
                 self
                   .options
@@ -227,9 +227,9 @@ impl DhcpMessage {
           }
           // dec54: server identifier
           SERVER_IDENTIFIER => {
-            let len = Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
-            let b = Self::take_next(&self, buf, &mut current_index, len.into()).unwrap();
-            match Self::get_ipv4_array(&self, len.into(), b) {
+            let len = Self::take_next(self, buf, &mut current_index, 1).unwrap()[0];
+            let b = Self::take_next(self, buf, &mut current_index, len.into()).unwrap();
+            match Self::get_ipv4_array(self, len.into(), b) {
               Ok(a) => {
                 self
                   .options
@@ -243,10 +243,10 @@ impl DhcpMessage {
           }
           DHCP_MESSAGE_TYPE => {
             let dhcp_message_type_len =
-              Self::take_next(&self, buf, &mut current_index, 1).unwrap()[0];
+              Self::take_next(self, buf, &mut current_index, 1).unwrap()[0];
             let dhcp_message_type =
-              Self::take_next(&self, buf, &mut current_index, dhcp_message_type_len.into())
-                .unwrap()[0];
+              Self::take_next(self, buf, &mut current_index, dhcp_message_type_len.into()).unwrap()
+                [0];
             self.options.insert(
               DHCP_MESSAGE_TYPE,
               DhcpOption::MessageType(dhcp_message_type.into()),
@@ -264,7 +264,7 @@ impl DhcpMessage {
               PARAMETER_REQUEST_LIST,
               DhcpOption::ParameterRequestList(prl_vec),
             );
-            current_index = current_index + prl_len;
+            current_index += prl_len;
           }
           SUBNET_MASK => {
             let subnet_mask_len = Self::take_next(self, buf, &mut current_index, 1).unwrap()[0];
@@ -414,7 +414,7 @@ impl DhcpMessage {
             offer_value = DhcpMessageType::DHCPACK.into();
           }
         } else if let Some(kv) = p.leases.get(&LeaseUnique {
-          ip: y.clone(),
+          ip: y,
           hwaddr: self.chaddr.clone(),
         }) {
           if kv.hwaddr == self.chaddr {
@@ -569,14 +569,12 @@ impl DhcpMessage {
                     }
                   }
                 }
-                if found {
-                  if c.debug {
-                    println!(
-                      "found existing lease for {}; re-issuing lease to {}",
-                      Ipv4Addr::from(yiaddr),
-                      format_mac(&chaddr)
-                    );
-                  }
+                if found && c.debug {
+                  println!(
+                    "found existing lease for {}; re-issuing lease to {}",
+                    Ipv4Addr::from(yiaddr),
+                    format_mac(&chaddr)
+                  );
                 }
                 if !found {
                   let a = match c.bind_address.ip() {
@@ -677,10 +675,10 @@ impl DhcpMessage {
     for x in 0..total_len {
       if x % 4 == 0 || x == 0 {
         let r: Ipv4Addr = Ipv4Addr::new(
-          ipv4_octets[usize::from(x)],
-          ipv4_octets[usize::from(x) + 1],
-          ipv4_octets[usize::from(x) + 2],
-          ipv4_octets[usize::from(x) + 3],
+          ipv4_octets[x],
+          ipv4_octets[x + 1],
+          ipv4_octets[x + 2],
+          ipv4_octets[x + 3],
         );
         ovec.push(r);
       }
