@@ -126,15 +126,15 @@ pub(crate) enum DhcpMessageType {
 impl From<DhcpMessageType> for u8 {
   fn from(orig: DhcpMessageType) -> Self {
     match orig {
-      DhcpMessageType::UNKNOWN => return 0,
-      DhcpMessageType::DHCPDISCOVER => return 1,
-      DhcpMessageType::DHCPOFFER => return 2,
-      DhcpMessageType::DHCPREQUEST => return 3,
-      DhcpMessageType::DHCPDECLINE => return 4,
-      DhcpMessageType::DHCPACK => return 5,
-      DhcpMessageType::DHCPNAK => return 6,
-      DhcpMessageType::DHCPRELEASE => return 7,
-      DhcpMessageType::DHCPINFORM => return 8,
+      DhcpMessageType::UNKNOWN => 0,
+      DhcpMessageType::DHCPDISCOVER => 1,
+      DhcpMessageType::DHCPOFFER => 2,
+      DhcpMessageType::DHCPREQUEST => 3,
+      DhcpMessageType::DHCPDECLINE => 4,
+      DhcpMessageType::DHCPACK => 5,
+      DhcpMessageType::DHCPNAK => 6,
+      DhcpMessageType::DHCPRELEASE => 7,
+      DhcpMessageType::DHCPINFORM => 8,
     }
   }
 }
@@ -142,15 +142,15 @@ impl From<DhcpMessageType> for u8 {
 impl From<u8> for DhcpMessageType {
   fn from(orig: u8) -> Self {
     match orig {
-      1 => return DhcpMessageType::DHCPDISCOVER,
-      2 => return DhcpMessageType::DHCPOFFER,
-      3 => return DhcpMessageType::DHCPREQUEST,
-      4 => return DhcpMessageType::DHCPDECLINE,
-      5 => return DhcpMessageType::DHCPACK,
-      6 => return DhcpMessageType::DHCPNAK,
-      7 => return DhcpMessageType::DHCPRELEASE,
-      8 => return DhcpMessageType::DHCPINFORM,
-      0 | _ => return DhcpMessageType::UNKNOWN,
+      1 => DhcpMessageType::DHCPDISCOVER,
+      2 => DhcpMessageType::DHCPOFFER,
+      3 => DhcpMessageType::DHCPREQUEST,
+      4 => DhcpMessageType::DHCPDECLINE,
+      5 => DhcpMessageType::DHCPACK,
+      6 => DhcpMessageType::DHCPNAK,
+      7 => DhcpMessageType::DHCPRELEASE,
+      8 => DhcpMessageType::DHCPINFORM,
+      0 | _ => DhcpMessageType::UNKNOWN,
     }
   }
 }
@@ -478,7 +478,7 @@ impl DhcpMessage {
           });
         }
         DOMAIN_NAME => {
-          if c.domain.len() > 0 {
+          if !c.domain.is_empty() {
             {
               response.push(DOMAIN_NAME);
               response.push(c.domain.chars().count().try_into().unwrap());
@@ -528,77 +528,72 @@ impl DhcpMessage {
     let mut chaddr = self.chaddr.clone();
     // TODO some stuff in here so we understand the 'conversation' part of the dhcp conversation
     // remember the xid
-    match self.options.get(&DHCP_MESSAGE_TYPE) {
-      Some(i) => match i {
-        DhcpOption::MessageType(x) => match x {
+    if let Some(i) = self.options.get(&DHCP_MESSAGE_TYPE) {
+      if let DhcpOption::MessageType(x) = i {
+        match x {
           DhcpMessageType::DHCPDISCOVER | DhcpMessageType::DHCPREQUEST => {
-            match self.options.get(&REQUESTED_IP_ADDRESS) {
-              Some(i) => match i {
-                DhcpOption::RequestedIpAddress(x) => {
-                  if p.valid_lease(*x) {
-                    // just ACK the client their requested address
-                    yiaddr = x.octets();
-                    if c.debug {
-                      println!("acking client {}", Ipv4Addr::from(yiaddr));
+            if let Some(i) = self.options.get(&REQUESTED_IP_ADDRESS) {
+              if let DhcpOption::RequestedIpAddress(x) = i {
+                if p.valid_lease(*x) {
+                  // just ACK the client their requested address
+                  yiaddr = x.octets();
+                  if c.debug {
+                    println!("acking client {}", Ipv4Addr::from(yiaddr));
+                  }
+                }
+              }
+            } else {
+              // client isn't requesting one specifically here, let's generate one and give it to em
+              let mut found: bool = false;
+              for (_k, l) in p.leases.iter_mut() {
+                if l.hwaddr == chaddr {
+                  // a lease already exists
+                  match l.lease_status() {
+                    LeaseStatus::Fresh => {
+                      yiaddr = l.ip.octets();
+                      found = true;
+                      break;
+                    }
+                    LeaseStatus::Decaying => {
+                      l.update_lease(SystemTime::now());
+                      yiaddr = l.ip.octets();
+                      found = true;
+                      break;
+                    }
+                    LeaseStatus::Expired => {
+                      break;
                     }
                   }
                 }
-                _ => {}
-              },
-              None => {
-                // client isn't requesting one specifically here, let's generate one and give it to em
-                let mut found: bool = false;
-                for (_k, l) in p.leases.iter_mut() {
-                  if l.hwaddr == chaddr {
-                    // a lease already exists
-                    match l.lease_status() {
-                      LeaseStatus::Fresh => {
-                        yiaddr = l.ip.octets();
-                        found = true;
-                        break;
+              }
+              if found && c.debug {
+                println!(
+                  "found existing lease for {}; re-issuing lease to {}",
+                  Ipv4Addr::from(yiaddr),
+                  format_mac(&chaddr)
+                );
+              }
+              if !found {
+                let a = match c.bind_address.ip() {
+                  IpAddr::V4(i) => i,
+                  IpAddr::V6(_) => Ipv4Addr::UNSPECIFIED,
+                };
+                yiaddr =
+                  match p.allocate_address(chaddr.clone(), c.lease_time, c.interface.as_str(), a) {
+                    Ok(l) => l.ip.octets(),
+                    Err(e) => {
+                      if c.debug {
+                        println!("Error allocating address: {:?}", e);
                       }
-                      LeaseStatus::Decaying => {
-                        l.update_lease(SystemTime::now());
-                        yiaddr = l.ip.octets();
-                        found = true;
-                        break;
-                      }
-                      LeaseStatus::Expired => {
-                        break;
-                      }
+                      [0, 0, 0, 0]
                     }
-                  }
-                }
-                if found && c.debug {
+                  };
+                if c.debug {
                   println!(
-                    "found existing lease for {}; re-issuing lease to {}",
+                    "new address requested for {}; issuing new lease to {}",
                     Ipv4Addr::from(yiaddr),
                     format_mac(&chaddr)
                   );
-                }
-                if !found {
-                  let a = match c.bind_address.ip() {
-                    IpAddr::V4(i) => i,
-                    IpAddr::V6(_) => Ipv4Addr::UNSPECIFIED,
-                  };
-                  yiaddr =
-                    match p.allocate_address(chaddr.clone(), c.lease_time, c.interface.as_str(), a)
-                    {
-                      Ok(l) => l.ip.octets(),
-                      Err(e) => {
-                        if c.debug {
-                          println!("Error allocating address: {:?}", e);
-                        }
-                        [0, 0, 0, 0]
-                      }
-                    };
-                  if c.debug {
-                    println!(
-                      "new address requested for {}; issuing new lease to {}",
-                      Ipv4Addr::from(yiaddr),
-                      format_mac(&chaddr)
-                    );
-                  }
                 }
               }
             }
@@ -612,10 +607,8 @@ impl DhcpMessage {
           }
           DhcpMessageType::DHCPINFORM => {}
           _ => {}
-        },
-        _ => {}
-      },
-      None => {}
+        }
+      }
     }
     let siaddr: [u8; 4] = self.siaddr.to_be_bytes();
     let giaddr: [u8; 4] = Ipv4Addr::new(0, 0, 0, 0).octets();
@@ -687,7 +680,7 @@ impl DhcpMessage {
   }
 
   pub(crate) fn get_client_ip(&self) -> Ipv4Addr {
-    return Ipv4Addr::from(self.ciaddr);
+    Ipv4Addr::from(self.ciaddr)
   }
 
   pub(crate) fn get_options_index(&self, ba: &[u8]) -> usize {
@@ -719,10 +712,10 @@ impl DhcpMessage {
   fn get_prl(&self) -> Vec<u8> {
     match self.options.get(&PARAMETER_REQUEST_LIST) {
       Some(d) => match d {
-        DhcpOption::ParameterRequestList(a) => return a.clone(),
-        _ => return Vec::new(),
+        DhcpOption::ParameterRequestList(a) => a.clone(),
+        _ => Vec::new(),
       },
-      None => return Vec::new(),
+      None => Vec::new(),
     }
   }
 }
